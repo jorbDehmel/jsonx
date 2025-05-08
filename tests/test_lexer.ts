@@ -116,6 +116,177 @@ function main() {
     'a', '!', '!', '!', ':', '{', 'b', '?', ':', '123', '}',
     ',', 'c', ':', 'a', '.', '0', 'EOF'
   ]);
+
+  //////////////////////////////////////////////////////////////
+  // Test cases from ../examples.jsonx
+
+  testCase(`
+      std : {
+        acos : x => std.acos(x),
+        read: file => std.read(file),
+        encrypt : { message : ? , key : ? } => ...
+      }`,
+           [
+             'std', ':',       '{',    'acos', ':',       'x',
+             '=>',  'std',     '.',    'acos', '(',       'x',
+             ')',   ',',       'read', ':',    'file',    '=>',
+             'std', '.',       'read', '(',    'file',    ')',
+             ',',   'encrypt', ':',    '{',    'message', ':',
+             '?',   ',',       'key',  ':',    '?',       '}',
+             '=>',  '...',     '}',    'EOF'
+           ]);
+
+  testCase('true', [ 'true', 'EOF' ]);
+
+  testCase('2*acos(0) // pi',
+           [ '2', '*', 'acos', '(', '0', ')', 'EOF' ]);
+
+  testCase('read(\'aes.key\') // data as binary blob',
+           [ 'read', '(', '\'aes.key\'', ')', 'EOF' ]);
+
+  testCase(
+      'encrypt(), decrypt()',
+      [ 'encrypt', '(', ')', ',', 'decrypt', '(', ')', 'EOF' ]);
+
+  testCase('use(std)', [ 'use', '(', 'std', ')', 'EOF' ]);
+
+  testCase('b16(\'dead.beef\')',
+           [ 'b16', '(', '\'dead.beef\'', ')', 'EOF' ]);
+
+  testCase(
+      'int(b10(\'32\'))',
+      [ 'int', '(', 'b10', '(', '\'32\'', ')', ')', 'EOF' ]);
+
+  testCase('b16.decode(\'dead.beef\')', [
+    'b16', '.', 'decode', '(', '\'dead.beef\'', ')', 'EOF'
+  ]);
+
+  testCase('b64.decode(\'peas.and.carrots\')', [
+    'b64', '.', 'decode', '(', '\'peas.and.carrots\'', ')',
+    'EOF'
+  ]);
+
+  testCase('int.decode(\'dead.beef\')', [
+    'int', '.', 'decode', '(', '\'dead.beef\'', ')', 'EOF'
+  ]);
+
+  testCase('uint()', [ 'uint', '(', ')', 'EOF' ]);
+
+  testCase('int(\'32\')', [ 'int', '(', '\'32\'', ')', 'EOF' ]);
+
+  testCase('float(\'32\')',
+           [ 'float', '(', '\'32\'', ')', 'EOF' ]);
+
+  testCase('byte_size(\'apple\')',
+           [ 'byte_size', '(', '\'apple\'', ')', 'EOF' ]);
+
+  testCase('char_size(\'apple\')',
+           [ 'char_size', '(', '\'apple\'', ')', 'EOF' ]);
+
+  testCase('{ x : 3 , y : 7}.x', [
+    '{', 'x', ':', '3', ',', 'y', ':', '7', '}', '.', 'x', 'EOF'
+  ]);
+
+  testCase('number.mantessa',
+           [ 'number', '.', 'mantessa', 'EOF' ]);
+
+  testCase('number.base', [ 'number', '.', 'base', 'EOF' ]);
+
+  testCase('number.exponent',
+           [ 'number', '.', 'exponent', 'EOF' ]);
+
+  testCase('integer : number { number.exponent => 0 }', [
+    'integer', ':', 'number', '{', 'number', '.', 'exponent',
+    '=>', '0', '}', 'EOF'
+  ]);
+
+  testCase('x.foo()', [ 'x', '.', 'foo', '(', ')', 'EOF' ]);
+
+  testCase('x : me.x', [ 'x', ':', 'me', '.', 'x', 'EOF' ]);
+
+  testCase('y : me.y', [ 'y', ':', 'me', '.', 'y', 'EOF' ]);
+
+  testCase('.1', [ '.', '1', 'EOF' ]);
+
+  // Tricky one!
+  testCase('.1 .2 .3 .5',
+           [ '.', '1', '.', '2', '.', '3', '.', '5', 'EOF' ]);
+
+  testCase('0.1', [ '0.1', 'EOF' ]);
+
+  testCase('[[1,3,]].0 .1', [
+    '[', '[', '1', ',', '3', ',', ']', ']', '.', '0', '.', '1',
+    'EOF'
+  ]);
+
+  testCase('[x,y,z]',
+           [ '[', 'x', ',', 'y', ',', 'z', ']', 'EOF' ]);
+
+  testCase('44.5', [ '44.5', 'EOF' ]);
+
+  testCase('json!?', [ 'json', '!', '?', 'EOF' ]);
+
+  testCase('{use(std), x: 1, pi: 2 * atan(1),}', [
+    '{',    'use', '(', 'std', ')', ',', 'x',
+    ':',    '1',   ',', 'pi',  ':', '2', '*',
+    'atan', '(',   '1', ')',   ',', '}', 'EOF'
+  ]);
+
+  testCase('{x : "y" + .y, y:.z + \'1\', z: 3, ' +
+               'a.b.c: 3, a: {b: {c: 3}}}',
+           [
+             '{', 'x', ':', '"y"', '+', '.',     'y', ',',
+             'y', ':', '.', 'z',   '+', '\'1\'', ',', 'z',
+             ':', '3', ',', 'a',   '.', 'b',     '.', 'c',
+             ':', '3', ',', 'a',   ':', '{',     'b', ':',
+             '{', 'c', ':', '3',   '}', '}',     '}', 'EOF'
+           ]);
+
+  testCase(
+      '{ api :{}, false : true "false":.false, ":": ' +
+          '"false"."false" defaults: {x: 3, y: 4, z:..z}, y: ' +
+          'defaults.y + 1, y!!!!: 77 "z": 44} == 77',
+      [
+        '{',  'api',     ':',     '{',        '}',
+        ',',  'false',   ':',     'true',     '"false"',
+        ':',  '.',       'false', ',',        '":"',
+        ':',  '"false"', '.',     '"false"',  'defaults',
+        ':',  '{',       'x',     ':',        '3',
+        ',',  'y',       ':',     '4',        ',',
+        'z',  ':',       '..',    'z',        '}',
+        ',',  'y',       ':',     'defaults', '.',
+        'y',  '+',       '1',     ',',        'y',
+        '!',  '!',       '!',     '!',        ':',
+        '77', '"z"',     ':',     '44',       '}',
+        '==', '77',      'EOF'
+      ]);
+
+  testCase(
+      '{ api : (endpoint) => ' +
+          '\`https://api.com/\${endpoint}\`, x: y, x?: 33, ' +
+          'x ?? ? !!!! : 7, }.x == 7 ',
+      [
+        '{',        'api',
+        ':',        '(',
+        'endpoint', ')',
+        '=>',       '\`https://api.com/\${endpoint}\`',
+        ',',        'x',
+        ':',        'y',
+        ',',        'x',
+        '?',        ':',
+        '33',       ',',
+        'x',        '?',
+        '?',        '?',
+        '!',        '!',
+        '!',        '!',
+        ':',        '7',
+        ',',        '}',
+        '.',        'x',
+        '==',       '7',
+        'EOF'
+      ]);
+
+  console.log('All lexer unit tests passed.');
 }
 
 main();
