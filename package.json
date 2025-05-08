@@ -1,0 +1,21 @@
+{
+  "name": "jsonx",
+  "version": "0.0.1",
+  "description": "",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "tsc": "tsc",
+    "test": "find dist/tests -type f -iname '*.js' -exec node '{}' \\;"
+  },
+  "author": "Warren MacEvoy, Jordan Dehmel",
+  "license": "MIT",
+  "dependencies": {
+    "save-dev": "^0.0.1-security"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.15",
+    "typescript": "^5.8.3"
+  }
+}
