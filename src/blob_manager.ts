@@ -5,7 +5,7 @@
  * @brief Manages blobs, what else is there to say
  */
 
-/// A lent-out copy-on-wright pointer to shared
+/// A lent-out copy-on-write pointer to shared
 /// memory
 class BlobInstance {
   /// The allocation manager owning this instance

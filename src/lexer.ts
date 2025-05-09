@@ -10,7 +10,7 @@ class Token {
   /// The text of the token
   text: string;
 
-  /// The type (LIT, OP, or ID)
+  /// The type (LIT, NUM, OP, or ID)
   type: string;
 
   /// The file of origin
@@ -55,7 +55,7 @@ class Token {
 
       // Numbers
       else if ('0' <= this.text[0] && this.text[0] <= '9') {
-        this.type = "LIT";
+        this.type = "NUM";
       }
 
       // Operators

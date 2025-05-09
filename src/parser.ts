@@ -10,9 +10,15 @@ import {Token} from "./lexer";
 
 /// Thrown when a parse error occurs
 class ScopeError {
+  /// The error message
   msg: string;
+
+  /// The place in the token stream where the error occurred (if
+  /// that information is available)
   tok?: Token;
 
+  /// Construct w/ some error message and (optionally) the token
+  /// that generated it
   constructor(msg: string, tok?: Token) {
     this.msg = msg;
     this.tok = tok;
@@ -21,16 +27,20 @@ class ScopeError {
 
 /// Represents a position in a token stream
 class Pos {
+  /// The list of tokens to iterate over
   tokens: Token[];
+
+  /// The current index into `tokens`
   pos: number;
 
+  /// Attach to some token stream
   constructor(tokens: Token[], pos: number = 0) {
     this.tokens = tokens;
     this.pos = pos;
   }
 
-  /// Consume and return the next token Returns <EOF> if we are
-  // already at the end.
+  /// Consume and return the next token Returns EOF if we are
+  /// already at the end.
   next(): Token {
     let tok = this.peek();
     ++this.pos;
@@ -53,6 +63,21 @@ class Pos {
     }
   }
 
+  /// Expect that the peek-ed token matches
+  peekExpect(text?: string, type?: string) {
+    let n = this.peek();
+    if (text != undefined && n.text != text) {
+      throw new ScopeError(
+          `Expected token text '${text}', but saw '${n.text}'`,
+          n);
+    }
+    if (type != undefined && n.text != text) {
+      throw new ScopeError(
+          `Expected token type '${type}', but saw '${n.type}'`,
+          n);
+    }
+  }
+
   /// Look at the next token non-comsumptively. Returns <EOF> if
   /// we are already at the end.
   peek() {
@@ -62,6 +87,7 @@ class Pos {
     } else {
       // Not out of range.
       let tok = this.tokens[this.pos];
+      console.log(`peek() is yielding token ${tok.text}`);
       return tok;
     }
   }
@@ -86,18 +112,18 @@ class Scope {
   }
 
   /// Append a new child to the tree
-  newChild(key?: string, value?: object,
+  newChild(key?: Token, value?: object,
            weight?: number): object {
     if (value instanceof Scope) {
       value.parent = this;
     }
     this.variables.push(
-        {name : key, value : value, weight : weight});
+        {name : key.text, value : value, weight : weight});
     return this.variables[this.variables.length - 1];
   }
 
   /// Allows compound names to be added
-  newChildRecursive(identifier: string[], value?: object,
+  newChildRecursive(identifier: Token[], value?: object,
                     weight?: number): object {
     if (identifier.length < 1) {
       throw new ScopeError(
@@ -153,15 +179,25 @@ class Scope {
   }
 }
 
+// NOTE for all parse* functions: Expect pos to point to the
+// first owned token, and leave pointing to the first token
+// AFTER
+
 /// Turns a token stream (manages by the Pos arg) and turns it
 /// into a parse tree
 function parseScope(pos: Pos): Scope {
   let out: Scope = new Scope();
-  pos.expect('{');
+  pos.peekExpect('{');
   while (pos.peek().text != '}') {
-    // Identifier (possibly compound, e.g. a.b[4].c)
-    let identifier = parseIdentifier(pos);
+    pos.next();
+
+    // Identifier (possibly compound, e.g. a.b.c, but never
+    // indicized)
+    console.log("Pre-ID");
+    let identifier = parseIdentifierLHS(pos);
+    console.log("Pre-weight");
     let weight = parseWeight(pos);
+    console.log("Post-weight");
 
     // Colon
     pos.expect(':');
@@ -178,6 +214,8 @@ function parseScope(pos: Pos): Scope {
     }
   }
   pos.expect('}');
+
+  // Now pointing to first token after
   return out;
 }
 
@@ -185,35 +223,61 @@ function parseArray(pos: Pos): Scope {
   let out = new Scope();
   pos.expect('[');
 
-  // RHS
-  let rhs = parseExpression(pos);
+  while (pos.peek().text != ']') {
+    // RHS
+    let rhs = parseExpression(pos);
 
-  // Add to scope
-  out.newChildRecursive(undefined, rhs);
+    // Add to scope
+    out.newChild(undefined, rhs);
 
-  // Optional comma
-  while (pos.peek().text == ',') {
-    pos.next();
+    // Optional comma
+    while (pos.peek().text == ',') {
+      pos.next();
+    }
   }
 
   pos.expect(']');
+
+  // Now pointing to first token after
   return out;
 }
 
-/// e.g. "a.b.c.d.e" -> [a, b, c, d, e]
-function parseIdentifier(pos: Pos): string[] {
-  let out: string[] = [];
+/// e.g. "a.b.0.d.e" -> ["a", "b", 0, "d", "e"]
+function parseIdentifier(pos: Pos): Token[] {
+  let out: Token[] = [];
 
   // One name is required
-  out.push(pos.next().text);
+  out.push(pos.next());
 
   // But any number more can follow that
   while (pos.peek().text == ".") {
     pos.next();
-    out.push(pos.next().text);
+
+    const tok = pos.next();
+    out.push(tok);
   }
 
+  // Now `peek` is not a dot, and we've already consumed the
+  // last name. Therefore, we must advance one more to point to
+  // first token after.
+  pos.next();
+
   return out;
+}
+
+/// The same as `parseIdentifier`, but only allows LHS-viable
+/// paths.
+function parseIdentifierLHS(pos: Pos): Token[] {
+  let identifier = parseIdentifier(pos);
+  let cleanedIdentifier: Token[] = [];
+  identifier.forEach((item) => {
+    if (item.type == "ID") {
+      cleanedIdentifier.push(item);
+    } else {
+      throw new Error("Cannot use indices in LHS identifier");
+    }
+  });
+  return cleanedIdentifier;
 }
 
 function parseWeight(pos: Pos): number {
@@ -227,6 +291,8 @@ function parseWeight(pos: Pos): number {
                              pos.peek());
       }
     }
+
+    pos.next();
   } else if (pos.peek().text == '!') {
     while (pos.peek().text == '!') {
       ++out;
@@ -236,7 +302,11 @@ function parseWeight(pos: Pos): number {
                              pos.peek());
       }
     }
+
+    pos.next();
   }
+
+  // Now pointing to first token after weighting
   return out;
 }
 
@@ -269,9 +339,12 @@ function parseExpression(pos: Pos): object {
   else if (tok.type == "ID") {
     // Identifier CHAIN
     obj = parseIdentifier(pos);
-  } else if (tok.type == "LIT") {
-    // Literal
+  } else if (tok.type == "LIT" || tok.type == "NUM") {
+    // Single-token literal
     obj = tok;
+
+    // Advance to first tok after literal
+    pos.next();
   }
 
   // MATH GOES HERE!!!!!!!!!
@@ -282,8 +355,8 @@ function parseExpression(pos: Pos): object {
 ////////////////////////////////////////////////////////////////
 
 /// Parse from token stream
-function parseJSONX(lexed: Token[]): Scope {
-  return parseScope(new Pos(lexed));
+function parseJSONX(lexed: Token[]): object {
+  return parseExpression(new Pos(lexed));
 }
 
 export {Scope, parseJSONX};
