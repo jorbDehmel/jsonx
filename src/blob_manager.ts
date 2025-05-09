@@ -107,6 +107,11 @@ class BlobManager {
     }
   }
 
+  /// Return the number of bytes used
+  usage(): number {
+    return this.bytesUsed;
+  }
+
   /// Get a read-only view of the data
   get(who: BlobInstance): Readonly<Uint8Array>|undefined {
     if (this.has(who)) {
@@ -119,6 +124,13 @@ class BlobManager {
   set(who: BlobInstance, what: Readonly<Uint8Array>) {
     this.free(who);
 
+    if (this.maxBytes != undefined &&
+        this.bytesUsed + what.length > this.maxBytes) {
+      throw Error(`BlobManager allocation of ${
+          what.length} bytes would overrun max of ${
+          this.maxBytes} bytes`);
+    }
+
     // Create new allocation
     if (this.nextAllocationIDs.length == 0) {
       this.nextAllocationIDs.push(this.nextToAdd);
@@ -127,15 +139,9 @@ class BlobManager {
     const ID = this.nextAllocationIDs.pop();
 
     this.bytesUsed += what.length;
-    if (this.maxBytes != undefined &&
-        this.bytesUsed > this.maxBytes) {
-      throw Error(`BlobManager allocation of ${
-          what.length} bytes would overrun max of ${
-          this.maxBytes} bytes`);
-    }
-
     this.allocations.set(ID, new Uint8Array(what));
-    this.allocationViewIDs.get(ID).add(who);
+    this.allocationViewIDs.set(ID,
+                               new Set<BlobInstance>([ who ]));
     this.pointers.set(who, ID);
   }
 }
