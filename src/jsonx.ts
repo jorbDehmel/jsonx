@@ -9,7 +9,9 @@
 import {tokenize} from "./lexer";
 import {parseJSONX, Scope} from "./parser";
 
-/// Resolve a parsed JSONX object
+/**
+ * @brief Resolve a parsed JSONX object.
+ */
 function interpretJSONX(what: Scope): object {
   return {};
 }
@@ -23,6 +25,4 @@ function loadsJSONX(text: string): object {
   return interpretJSONX(parsed);
 }
 
-export {
-  loadsJSONX,
-};
+export {loadsJSONX};

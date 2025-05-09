@@ -1,6 +1,6 @@
 "use strict";
 
-import {tokenize, Token} from "../src/lexer";
+import {tokenize} from "../src/lexer";
 import {parseJSONX, Scope} from "../src/parser";
 
 /**
@@ -8,10 +8,23 @@ import {parseJSONX, Scope} from "../src/parser";
  * @brief Tests the JSONX parser
  */
 
+/// Parses, then prints. Implicitly tests that the string
+/// parses.
+function parseAndPrint(text: string) {
+  console.log(`Parsing '${text}'`);
+
+  console.log('Tokenized:\n')
+  tokenize(text).forEach((what) => {
+    console.log(what);
+  });
+
+  let s: Scope = parseJSONX(tokenize(text));
+  console.log(s);
+}
+
 /// Runs test cases
 function main() {
-  let s: Scope = parseJSONX(tokenize(''));
-  console.log(s);
+  parseAndPrint('{a: 12}');
 }
 
 main();

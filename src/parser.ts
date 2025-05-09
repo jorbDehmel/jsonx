@@ -41,12 +41,12 @@ class Pos {
   /// This is CONSUMPTIVE.
   expect(text?: string, type?: string) {
     let n = this.next();
-    if (text != undefined && n.text !== text) {
+    if (text != undefined && n.text != text) {
       throw new ScopeError(
           `Expected token text '${text}', but saw '${n.text}'`,
           n);
     }
-    if (type != undefined && n.text !== text) {
+    if (type != undefined && n.text != text) {
       throw new ScopeError(
           `Expected token type '${type}', but saw '${n.type}'`,
           n);
@@ -102,7 +102,7 @@ class Scope {
     if (identifier.length < 1) {
       throw new ScopeError(
           'Cannot add variable with empty compound path!');
-    } else if (identifier.length === 1) {
+    } else if (identifier.length == 1) {
       return this.newChild(identifier[0], value, weight);
     } else {
       let localName = identifier[0];
@@ -142,7 +142,7 @@ class Scope {
       |undefined {
     if (identifier.length > 0) {
       let child = this.getChild(identifier[0]);
-      if (identifier.length === 1) {
+      if (identifier.length == 1) {
         return child;
       } else if (child instanceof Scope) {
         identifier.splice(0, 1);
@@ -173,11 +173,30 @@ function parseScope(pos: Pos): Scope {
     out.newChildRecursive(identifier, rhs, weight);
 
     // Optional comma
-    if (pos.peek().text === ',') {
+    while (pos.peek().text == ',') {
       pos.next();
     }
   }
   pos.expect('}');
+  return out;
+}
+
+function parseArray(pos: Pos): Scope {
+  let out = new Scope();
+  pos.expect('[');
+
+  // RHS
+  let rhs = parseExpression(pos);
+
+  // Add to scope
+  out.newChildRecursive(undefined, rhs);
+
+  // Optional comma
+  while (pos.peek().text == ',') {
+    pos.next();
+  }
+
+  pos.expect(']');
   return out;
 }
 
@@ -188,8 +207,8 @@ function parseIdentifier(pos: Pos): string[] {
   // One name is required
   out.push(pos.next().text);
 
-  // But any number can follow that
-  while (pos.peek().text === ".") {
+  // But any number more can follow that
+  while (pos.peek().text == ".") {
     pos.next();
     out.push(pos.next().text);
   }
@@ -199,20 +218,20 @@ function parseIdentifier(pos: Pos): string[] {
 
 function parseWeight(pos: Pos): number {
   let out = 0;
-  if (pos.peek().text === '?') {
-    while (pos.peek().text === '?') {
+  if (pos.peek().text == '?') {
+    while (pos.peek().text == '?') {
       --out;
       pos.next();
-      if (pos.peek().text === '!') {
+      if (pos.peek().text == '!') {
         throw new ScopeError('Cannot have both \'?\' and \'!\'',
                              pos.peek());
       }
     }
-  } else if (pos.peek().text === '!') {
-    while (pos.peek().text === '!') {
+  } else if (pos.peek().text == '!') {
+    while (pos.peek().text == '!') {
       ++out;
       pos.next();
-      if (pos.peek().text === '?') {
+      if (pos.peek().text == '?') {
         throw new ScopeError('Cannot have both \'?\' and \'!\'',
                              pos.peek());
       }
@@ -225,11 +244,11 @@ function parseWeight(pos: Pos): number {
 The RHS of a statement
 
 Easy options:
-- A variable name
 - A scope / map
 - A list
 
 Easy + suffix options
+- A variable name
 - A lambda / arrow function
 - A function call on some expressions
 
@@ -237,30 +256,34 @@ Hard:
 - Math
 */
 function parseExpression(pos: Pos): object {
-  const tok = pos.peek().text;
-  if (tok === '[') {
+  const tok = pos.peek();
+  let obj: object = undefined;
+  if (tok.text == '[') {
     // Array
-  } else if (tok === '{') {
+    obj = parseArray(pos);
+  } else if (tok.text == '{') {
     // Scope
+    obj = parseScope(pos);
   }
 
-  return {};
+  else if (tok.type == "ID") {
+    // Identifier CHAIN
+    obj = parseIdentifier(pos);
+  } else if (tok.type == "LIT") {
+    // Literal
+    obj = tok;
+  }
+
+  // MATH GOES HERE!!!!!!!!!
+
+  return obj;
 }
 
 ////////////////////////////////////////////////////////////////
 
 /// Parse from token stream
 function parseJSONX(lexed: Token[]): Scope {
-  let globalScope: Token[] = [
-    new Token("{"),
-  ];
-
-  lexed.forEach((item) => {
-    globalScope.push(item);
-  });
-  globalScope.push(new Token("}"));
-
-  return parseScope(new Pos(globalScope));
+  return parseScope(new Pos(lexed));
 }
 
 export {Scope, parseJSONX};

@@ -2,12 +2,9 @@
   "name": "jsonx",
   "version": "0.0.1",
   "description": "",
-  "directories": {
-    "test": "tests"
-  },
   "scripts": {
     "tsc": "tsc",
-    "test": "find dist/tests -type f -iname '*.js' -exec node '{}' \\;"
+    "test": "find dist/tests -type f -iname 'test_*.js' -exec node '{}' \\;"
   },
   "author": "Warren MacEvoy, Jordan Dehmel",
   "license": "MIT",
