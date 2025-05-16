@@ -4,6 +4,9 @@
  * @file
  * @brief Parses JSONX from a token stream to a resolvable (but
  * not resolved) object
+ *
+ * NOTE: The parser should always be lazy. Inclusions should
+ * have weights
  */
 
 import {Token} from "./lexer";

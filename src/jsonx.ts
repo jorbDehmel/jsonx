@@ -10,16 +10,6 @@ import {tokenize} from "./lexer";
 import {parseJSONX, Scope} from "./parser";
 
 /**
- * @brief Resolve a parsed JSONX object.
- */
-function interpretJSONX(what: Scope,
-                        maxBytesDA?: number): object {
-  return {};
-}
-
-////////////////////////////////////////////////////////////////
-
-/**
  * @brief Load a JSONX-formatted string to a JS object
  * @param text The JSONX text to load
  * @param maxMs The max number of ms to give the process
