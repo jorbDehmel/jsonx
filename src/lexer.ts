@@ -120,4 +120,88 @@ function tokenize(src: string, filepath?: string): Token[] {
   return tokens;
 }
 
-export {Token, tokenize};
+/// Thrown when a parse error occurs
+class ParseError {
+  /// The error message
+  msg: string;
+
+  /// The place in the token stream where the error occurred (if
+  /// that information is available)
+  tok?: Token;
+
+  /// Construct w/ some error message and (optionally) the token
+  /// that generated it
+  constructor(msg: string, tok?: Token) {
+    this.msg = msg;
+    this.tok = tok;
+  }
+}
+
+/// Represents a position in a token stream
+class Pos {
+  /// The list of tokens to iterate over
+  tokens: Token[];
+
+  /// The current index into `tokens`
+  pos: number;
+
+  /// Attach to some token stream
+  constructor(tokens: Token[], pos: number = 0) {
+    this.tokens = tokens;
+    this.pos = pos;
+  }
+
+  /// Consume and return the next token Returns EOF if we are
+  /// already at the end.
+  next(): Token {
+    let tok = this.peek();
+    ++this.pos;
+    return tok;
+  }
+
+  /// Get the next token, throwing an error if it doesn't match.
+  /// This is CONSUMPTIVE.
+  expect(text?: string, type?: string) {
+    let n = this.next();
+    if (text != undefined && n.text != text) {
+      throw new ParseError(
+          `Expected token text '${text}', but saw '${n.text}'`,
+          n);
+    }
+    if (type != undefined && n.text != text) {
+      throw new ParseError(
+          `Expected token type '${type}', but saw '${n.type}'`,
+          n);
+    }
+  }
+
+  /// Expect that the peek-ed token matches
+  peekExpect(text?: string, type?: string) {
+    let n = this.peek();
+    if (text != undefined && n.text != text) {
+      throw new ParseError(
+          `Expected token text '${text}', but saw '${n.text}'`,
+          n);
+    }
+    if (type != undefined && n.text != text) {
+      throw new ParseError(
+          `Expected token type '${type}', but saw '${n.type}'`,
+          n);
+    }
+  }
+
+  /// Look at the next token non-comsumptively. Returns <EOF> if
+  /// we are already at the end.
+  peek() {
+    if (this.pos >= this.tokens.length) {
+      // Out of range!
+      return new Token("<EOF>", "EOF");
+    } else {
+      // Not out of range.
+      let tok = this.tokens[this.pos];
+      return tok;
+    }
+  }
+}
+
+export {Token, tokenize, ParseError, Pos};

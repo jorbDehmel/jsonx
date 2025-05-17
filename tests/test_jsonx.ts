@@ -5,11 +5,11 @@
  * @brief Tests the JSONX interpreter
  */
 
-import {} from "../src/jsonx";
+import {loadsJSONX, JSONX} from "../src/jsonx_obj";
 
 /// Runs test cases
 function main() {
-  console.log("Hello from test_jsonx.ts");
+  let settings: JSONX = loadsJSONX('');
 }
 
 main();

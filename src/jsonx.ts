@@ -1,13 +1,12 @@
-"use strict";
-
 /**
  * @file
  * @brief Forward-facing JSONX interface. This defines how to
  * resolve a JSONX object.
  */
 
-import {tokenize} from "./lexer";
-import {parseJSONX, Scope} from "./parser";
+import {BlobManager} from "./blob_manager";
+import {Token, tokenize} from "./lexer";
+import {JSONX, JSONXVarType, parseJSONX} from "./parser";
 
 /**
  * @brief Load a JSONX-formatted string to a JS object
@@ -18,7 +17,10 @@ import {parseJSONX, Scope} from "./parser";
  * @returns The JS object represented by the JSONX text
  */
 function loadsJSONX(text: string, maxMs?: number,
-                    maxBytesDA?: number): object {
+                    maxBytesDA?: number): JSONXVarType {
+  // Set max bytes
+  BlobManager.maxBytes = maxBytesDA;
+
   // If a max time was given, start a timer
   let timeoutID: NodeJS.Timeout;
   if (maxMs != undefined) {
@@ -36,14 +38,11 @@ function loadsJSONX(text: string, maxMs?: number,
   // Parse
   const parsed = parseJSONX(tokens);
 
-  // Resolve
-  const to_return = interpretJSONX(parsed, maxBytesDA);
-
   // If we have a timer running, cancel it
   if (maxMs != undefined) {
     clearTimeout(timeoutID);
   }
-  return to_return;
+  return parsed;
 }
 
-export {loadsJSONX};
+export {loadsJSONX, JSONX};

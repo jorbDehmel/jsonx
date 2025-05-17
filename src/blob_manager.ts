@@ -65,11 +65,11 @@ class BlobManager {
   private bytesUsed: number = 0;
 
   /// The max number of bytes
-  maxBytes?: number = 1024 * 64;
+  static maxBytes?: number = 1024 * 64;
 
   /// Initialize w/ some max number of bytes
   constructor(maxBytes?: number) {
-    this.maxBytes = maxBytes;
+    maxBytes = maxBytes;
   }
 
   /// True iff we own data
@@ -124,11 +124,11 @@ class BlobManager {
   set(who: BlobInstance, what: Readonly<Uint8Array>) {
     this.free(who);
 
-    if (this.maxBytes != undefined &&
-        this.bytesUsed + what.length > this.maxBytes) {
+    if (BlobManager.maxBytes != undefined &&
+        this.bytesUsed + what.length > BlobManager.maxBytes) {
       throw Error(`BlobManager allocation of ${
           what.length} bytes would overrun max of ${
-          this.maxBytes} bytes`);
+          BlobManager.maxBytes} bytes`);
     }
 
     // Create new allocation
