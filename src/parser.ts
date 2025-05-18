@@ -11,7 +11,36 @@ import {BlobInstance, BlobManager} from "./blob_manager";
 import {ParseError, Pos, Token} from "./lexer";
 
 ///
-class JSONXLambdaBody {}
+class JSONXLambdaBody {
+  args: String[];
+  body: Token[];
+
+  call(args: String[][]): JSONXVarType {
+    // Create map
+    let replacements = new Map<String, String[]>();
+    for (let i = 0; i < this.args.length; ++i) {
+      replacements.set(this.args[i], arguments[i]);
+    }
+
+    // Replacements
+    let toParse: Token[] = [];
+    this.body.forEach((tok) => {
+      if (replacements.has(tok.text)) {
+        replacements.get(tok.text).forEach((tokToAdd) => {
+          let toAdd: Token =
+              new Token(tokToAdd as string, tok.type, tok.file,
+                        tok.line, tok.col);
+          toParse.push(toAdd);
+        });
+      } else {
+        toParse.push(tok);
+      }
+    });
+
+    // Parse and return
+    return parseJSONX(toParse);
+  }
+}
 
 ///
 type JSONXVarType =
@@ -119,20 +148,16 @@ class JSONX {
         return a.weight - b.weight;
       })
 
-      return out[0];
+      return out[0].value;
     } else if (key instanceof Number &&
                key as number < this.__variables.length) {
       // Index
       // NOTE: Indexed items cannot use weights!
-      return this.__variables[key as number];
+      return this.__variables[key as number].value;
     }
 
     // Invalid index
     return undefined;
-  }
-
-  /// Calls a lambda function
-  call(): JSONXVarType {
   }
 }
 
@@ -223,6 +248,7 @@ function parseIdentifierLHS(pos: Pos): Token[] {
     if (item.type == "ID") {
       cleanedIdentifier.push(item);
     } else {
+      console.log(identifier);
       throw new Error("Cannot use indices in LHS identifier");
     }
   });
@@ -290,8 +316,10 @@ function parseExpression(pos: Pos): JSONXVarType {
   // MATH, LAMBDA DEF, FN CALL STUFF GOES HERE!!!!!!!!!
   if (pos.peek().text == "=>") {
     // Lambda def
+    throw new Error("Lambda function parsing is unimplemented")
   } else if (pos.peek().text == "(") {
     // Lambda call
+    throw new Error("Lambda function calling is unimplemented")
   }
 
   return obj;
