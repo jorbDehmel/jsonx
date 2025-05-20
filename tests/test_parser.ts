@@ -48,8 +48,16 @@ function main() {
   parseAndPrint('{a: 12}');
   parseAndPrint('{a: 12, b: 13}');
 
+  // Remember, this should be a superset of JSON
+  parseAndPrint('{"a": 12, "b": 13}');
+
   // Simple array
   parseAndPrint('[1, true, a, 100]');
+
+  // Lambdas
+  parseAndPrint(
+      '{api: endpoint => `https://api.com/\${endpoint}`, ' +
+      'x: y, x?: 33, x!!!!: 7}');
 
   // Weights, math, and compound structures
   parseAndPrint('{a!!!: {b?: 123}, c: a.0}');
@@ -61,11 +69,6 @@ function main() {
       '{api : {}, false: true, "false": this.false, ":": ' +
       '"false"."false", defaults: {x: 3, y: 4, z: parent.z}, ' +
       'y: defaults.y + 1, y!!!!: 77 "z": 44} == 77');
-
-  // Lambdas
-  parseAndPrint(
-      '{api: endpoint => `https://api.com/\${endpoint}`, ' +
-      'x: y, x?: 33, x!!!!: 7}.x');
 
   // Error cases
   shouldNotParse('{a: }');

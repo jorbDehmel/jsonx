@@ -5,8 +5,14 @@
  * @brief
  */
 
-import {assert} from "console";
 import {BlobManager, BlobInstance} from "../src/blob_manager";
+
+function assert(condition: boolean, msg?: string): void {
+  if (!condition) {
+    throw new Error(msg == undefined ? 'Assertion failed'
+                                     : msg);
+  }
+}
 
 /// Run test cases
 function main() {

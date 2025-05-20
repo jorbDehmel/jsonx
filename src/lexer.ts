@@ -10,7 +10,7 @@ class Token {
   /// The text of the token
   text: string;
 
-  /// The type (LIT, NUM, OP, or ID)
+  /// The type (LIT, NUM, OP, MATH, or ID)
   type: string;
 
   /// The file of origin
@@ -60,7 +60,17 @@ class Token {
 
       // Operators
       else if (operators.includes(this.text[0])) {
-        this.type = "OP";
+        if (this.text == "+" || this.text == "-" ||
+            this.text == "*" || this.text == "/" ||
+            this.text == "%" || this.text == "&&" ||
+            this.text == "||" || this.text == "==" ||
+            this.text == "!=" || this.text == "<" ||
+            this.text == "<=" || this.text == ">" ||
+            this.text == ">=") {
+          this.type = "MATH";
+        } else {
+          this.type = "OP";
+        }
       }
 
       // EOF
@@ -89,7 +99,7 @@ function tokenize(src: string, filepath?: string): Token[] {
           "`(?:\\.|\\$\\{|\\}|[^`])*`|" + // Format strings
           "'(?:\\.|[^'])*'|\"(?:\\.|[^\"])*\"|" + // Normal
                                                   // strings
-          "\\.+|" + // Dots and elipsis
+          "\\.{3}|\\.|" + // Dots and elipsis
           "[0-9]+(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?n?" + // Nums
           ")",
       "g");

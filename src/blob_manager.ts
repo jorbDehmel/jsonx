@@ -69,7 +69,9 @@ class BlobManager {
 
   /// Initialize w/ some max number of bytes
   constructor(maxBytes?: number) {
-    maxBytes = maxBytes;
+    if (maxBytes != undefined) {
+      BlobManager.maxBytes = maxBytes;
+    }
   }
 
   /// True iff we own data

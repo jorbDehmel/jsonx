@@ -9,48 +9,48 @@
 import assert = require("assert");
 import {BlobInstance, BlobManager} from "./blob_manager";
 import {ParseError, Pos, Token} from "./lexer";
+import {loadfJSONX} from "./jsonx";
 
-///
-class JSONXLambdaBody {
-  args: String[];
-  body: Token[];
-
-  call(args: String[][]): JSONXVarType {
-    // Create map
-    let replacements = new Map<String, String[]>();
-    for (let i = 0; i < this.args.length; ++i) {
-      replacements.set(this.args[i], arguments[i]);
-    }
-
-    // Replacements
-    let toParse: Token[] = [];
-    this.body.forEach((tok) => {
-      if (replacements.has(tok.text)) {
-        replacements.get(tok.text).forEach((tokToAdd) => {
-          let toAdd: Token =
-              new Token(tokToAdd as string, tok.type, tok.file,
-                        tok.line, tok.col);
-          toParse.push(toAdd);
-        });
-      } else {
-        toParse.push(tok);
-      }
-    });
-
-    // Parse and return
-    return parseJSONX(toParse);
-  }
+/// "statically typed language" my foot
+function isString(data: unknown): data is string {
+  return typeof data === 'string';
+}
+function isNumber(data: unknown): data is number {
+  return typeof data === 'number';
 }
 
 ///
-type JSONXVarType =
-    JSONX|Token|Token[]|BlobInstance|JSONXLambdaBody;
+type JSONXVarType = JSONX|Token|BlobInstance|JSONXLambdaBody;
+
+///
+class JSONXLambdaBody {
+  args: String;
+  body: JSONXVarType|((thisJSONX: JSONXVarType,
+                       arg: JSONXVarType) => JSONXVarType);
+
+  constructor(args: String, body: JSONXVarType|
+              ((thisJSONX: JSONXVarType,
+                arg: JSONXVarType) => JSONXVarType)) {
+    this.args = args;
+    this.body = body;
+  }
+
+  call(thisJSONX: JSONX, args: JSONXVarType): JSONXVarType {
+    if (this.body instanceof Function) {
+      // External call
+      return this.body(thisJSONX, args);
+    } else {
+      // Internal call
+      throw new Error("Lambda replacement is unimplemented");
+    }
+  }
+}
 
 /// Can represent a variable, scope, or whatever else.
 class JSONXVariableNode {
-  name?: string;
-  value: JSONXVarType;
-  weight?: number;
+  name?: String;
+  value: JSONXVarType|(Number|String)[];
+  weight?: number = 0;
 }
 
 ///
@@ -67,8 +67,8 @@ class JSONX {
   private __variables: JSONXVariableNode[];
 
   /// Create a root node
-  constructor() {
-    this.__parent = undefined;
+  constructor(parent?: JSONX) {
+    this.__parent = parent;
     this.__blobManager = undefined;
     this.__variables = [];
   }
@@ -84,7 +84,8 @@ class JSONX {
   }
 
   /// Append a new child to the tree
-  insert(key?: Token|Token[], value?: JSONXVarType,
+  insert(key?: String|String[],
+         value?: JSONXVarType|(Number|String)[],
          weight?: number): JSONXVariableNode {
     if (Array.isArray(key)) {
       if (key.length < 1) {
@@ -96,7 +97,8 @@ class JSONX {
         let localName = key[0];
         key.splice(0, 1);
         let newScope =
-            this.insert(localName, new JSONX()).value as JSONX;
+            this.insert(localName, new JSONX(this)).value as
+            JSONX;
         return newScope.insert(key, value, weight);
       }
     } else {
@@ -104,11 +106,8 @@ class JSONX {
         assert(value.__blobManager == undefined);
         value.__parent = this;
       }
-      this.__variables.push({
-        name : key?.text ?? undefined,
-        value : value,
-        weight : weight
-      });
+      this.__variables.push(
+          {name : key, value : value, weight : weight});
       return this.__variables[this.__variables.length - 1];
     }
   }
@@ -126,8 +125,14 @@ class JSONX {
           return child.get(key);
         }
       }
-    } else if (key instanceof String) {
+    } else if (isString(key)) {
       // Variable name
+      if (key == "this") {
+        return this;
+      } else if (key == "parent") {
+        return this.__parent;
+      }
+
       let out: JSONXVariableNode[] = [];
       for (const variable of this.__variables) {
         if (variable.name != undefined &&
@@ -142,18 +147,29 @@ class JSONX {
 
       // Return the one with the highest weight
       out.sort((a: JSONXVariableNode, b: JSONXVariableNode) => {
-        // if a < b, return negative
-        // if a = b, return 0
-        // if a > b, return positive
-        return a.weight - b.weight;
+        return b.weight - a.weight;
       })
 
-      return out[0].value;
-    } else if (key instanceof Number &&
+      if (out.length > 1 && out[0].weight == out[1].weight) {
+        throw new Error(`Multiple values for '${
+            out[0].name}' have weight '${out[0].weight}'`);
+      }
+
+      if (!Array.isArray(out[0].value)) {
+        return out[0].value;
+      } else {
+        return this.get(out[0].value);
+      }
+    } else if (isNumber(key) &&
                key as number < this.__variables.length) {
       // Index
       // NOTE: Indexed items cannot use weights!
-      return this.__variables[key as number].value;
+      const toReturn = this.__variables[key as number].value;
+      if (!Array.isArray(toReturn)) {
+        return toReturn;
+      } else {
+        return this.get(toReturn);
+      }
     }
 
     // Invalid index
@@ -162,9 +178,9 @@ class JSONX {
 }
 
 /// Turns a token stream (manages by the Pos arg) and turns it
-/// into a parse tree
-function parseScope(pos: Pos): JSONX {
-  let out: JSONX = new JSONX();
+/// into a parse tree whose parent is context.
+function parseScope(pos: Pos, context?: JSONX): JSONX {
+  let out: JSONX = new JSONX(context);
   pos.expect('{');
   while (pos.peek().text != '}') {
     // Identifier (possibly compound, e.g. a.b.c, but never
@@ -176,7 +192,7 @@ function parseScope(pos: Pos): JSONX {
     pos.expect(':');
 
     // RHS
-    let rhs = parseExpression(pos);
+    let rhs = parseExpression(pos, out);
 
     // Add to scope
     out.insert(identifier, rhs, weight);
@@ -192,13 +208,13 @@ function parseScope(pos: Pos): JSONX {
   return out;
 }
 
-function parseArray(pos: Pos): JSONX {
-  let out = new JSONX();
+function parseArray(pos: Pos, context?: JSONX): JSONX {
+  let out = new JSONX(context);
   pos.expect('[');
 
   while (pos.peek().text != ']') {
     // RHS
-    let rhs = parseExpression(pos);
+    let rhs = parseExpression(pos, out);
 
     // Add to scope
     out.insert(undefined, rhs);
@@ -217,23 +233,37 @@ function parseArray(pos: Pos): JSONX {
 
 /// A reference to an existing value: e.g. "a.b.0.d.e" ->
 /// ["a", "b", 0, "d", "e"]
-function parseIdentifier(pos: Pos): Token[] {
-  let out: Token[] = [];
+function parseIdentifierRHS(pos: Pos): (String|Number)[] {
+  let out: (String|Number)[] = [];
 
   // One name is required
-  out.push(pos.next());
+  const tok = pos.next();
+  if (tok.type == "ID") {
+    out.push(tok.text as String);
+  } else {
+    throw new Error(
+        `'${tok.text}' is not a valid RHS first identifier.`);
+  }
 
-  // But any number more can follow that
+  // But any number more can follow that, with slightly looser
+  // restrictions (indices and strings)
   while (pos.peek().text == ".") {
     pos.next();
 
     const tok = pos.next();
-    if (tok.type != "ID" && tok.type != "NUM") {
+    if (tok.type == "ID") {
+      out.push(tok.text as String);
+    } else if (tok.type == "NUM") {
+      out.push(Number.parseInt(tok.text) as Number);
+    } else if (tok.text.startsWith('"') ||
+               tok.text.startsWith('\'') ||
+               tok.text.startsWith('`')) {
+      out.push(tok.text.substring(1, tok.text.length - 1) as
+               String);
+    } else {
       throw new Error(
           `'${tok.text}' is not a valid identifier.`);
     }
-
-    out.push(tok);
   }
 
   return out;
@@ -241,18 +271,22 @@ function parseIdentifier(pos: Pos): Token[] {
 
 /// The same as `parseIdentifier`, but only allows LHS-viable
 /// paths (no indices)
-function parseIdentifierLHS(pos: Pos): Token[] {
-  let identifier = parseIdentifier(pos);
-  let cleanedIdentifier: Token[] = [];
-  identifier.forEach((item) => {
-    if (item.type == "ID") {
-      cleanedIdentifier.push(item);
+function parseIdentifierLHS(pos: Pos): String {
+  let tok = pos.next();
+  if (pos.peek().text == ".") {
+    throw new Error(
+        "LHS identifiers must contain exactly one token");
+  } else if (tok.type == "NUM") {
+    throw new Error("LHS identifiers must not be indices");
+  } else {
+    if (tok.text.startsWith('"') || tok.text.startsWith('\'') ||
+        tok.text.startsWith('`')) {
+      return tok.text.substring(1, tok.text.length - 1) as
+             String;
     } else {
-      console.log(identifier);
-      throw new Error("Cannot use indices in LHS identifier");
+      return tok.text as String;
     }
-  });
-  return cleanedIdentifier;
+  }
 }
 
 function parseWeight(pos: Pos): number {
@@ -291,20 +325,22 @@ Easy + suffix options
 Hard:
 - Math
 */
-function parseExpression(pos: Pos): JSONXVarType {
+function parseExpression(pos: Pos, context?: JSONX):
+    JSONXVarType|(Number | String)[] {
   const tok = pos.peek();
-  let obj: JSONXVarType = undefined;
+  let obj: JSONXVarType|undefined|(Number | String)[] =
+      undefined;
   if (tok.text == '[') {
     // Array
-    obj = parseArray(pos);
+    obj = parseArray(pos, context);
   } else if (tok.text == '{') {
     // Scope
-    obj = parseScope(pos);
+    obj = parseScope(pos, context);
   }
 
   else if (tok.type == "ID") {
     // Identifier CHAIN referring to an existing value
-    obj = parseIdentifier(pos);
+    obj = parseIdentifierRHS(pos);
   } else if (tok.type == "LIT" || tok.type == "NUM") {
     // Single-token literal
     obj = tok;
@@ -313,13 +349,50 @@ function parseExpression(pos: Pos): JSONXVarType {
     pos.next();
   }
 
-  // MATH, LAMBDA DEF, FN CALL STUFF GOES HERE!!!!!!!!!
-  if (pos.peek().text == "=>") {
-    // Lambda def
-    throw new Error("Lambda function parsing is unimplemented")
-  } else if (pos.peek().text == "(") {
-    // Lambda call
-    throw new Error("Lambda function calling is unimplemented")
+  let didThing = true;
+  while (didThing) {
+    didThing = false;
+    const next = pos.peek();
+    if (next.text == "=>") {
+      // Lambda def
+      if (!Array.isArray(obj) || obj.length != 1 ||
+          !isString(obj[0])) {
+        console.log(obj);
+        throw new Error(
+            "Lambda argument must be a single LHS identifier");
+      }
+      pos.next();
+      let body = parseExpression(pos, context);
+      if (Array.isArray(body)) {
+        body = context.get(body);
+      }
+      let lambda = new JSONXLambdaBody(obj[0], body);
+      obj = lambda;
+      didThing = true;
+    } else if (next.text == "(") {
+      // Lambda reduction
+      // Ensure we are talking about a lambda
+      if (!(obj instanceof JSONXLambdaBody)) {
+        throw new Error("");
+      }
+
+      // Parse call
+      pos.expect("(");
+      let args = parseExpression(pos, context);
+      pos.expect(")");
+
+      if (Array.isArray(args)) {
+        args = context.get(args);
+      }
+
+      // Do the call
+      obj = obj.call(context, args);
+      didThing = true;
+    } else if (pos.peek().type == "MATH") {
+      // Binary math ops
+      throw new Error("Math is unimplemented");
+      didThing = true;
+    }
   }
 
   return obj;
@@ -328,8 +401,34 @@ function parseExpression(pos: Pos): JSONXVarType {
 ////////////////////////////////////////////////////////////////
 
 /// Parse from token stream
-function parseJSONX(lexed: Token[]): JSONXVarType {
-  return parseExpression(new Pos(lexed));
+function parseJSONX(lexed: Token[],
+                    context?: JSONX): JSONXVarType|undefined {
+  if (lexed.length == 0) {
+    return undefined;
+  }
+
+  let pos = new Pos(lexed);
+  let toReturn = parseExpression(pos, context);
+  pos.expect('EOF');
+
+  if (Array.isArray(toReturn)) {
+    return context?.get(toReturn);
+  }
+  return toReturn;
 }
 
-export {parseJSONX, JSONXVarType, JSONX};
+/// A static bundle of functions that should be included most
+/// of the time
+let std = new JSONX();
+std.insert('use', new JSONXLambdaBody('path', (_, arg) => {
+             return loadfJSONX((arg as Token).text);
+           }));
+std.insert('throw', new JSONXLambdaBody('message', (_, arg) => {
+             throw arg;
+           }));
+std.insert('print', new JSONXLambdaBody('string', (_, arg) => {
+             console.log(arg);
+             return arg;
+           }));
+
+export {parseJSONX, JSONXVarType, JSONX, std};
