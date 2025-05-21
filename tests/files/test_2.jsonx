@@ -1,0 +1,8 @@
+// Tests comments,
+/* As well as `env` */
+// And some basic file ops
+{
+    loadf: env.loadf,
+    test_1?: loadf("./tests/files/test_1.jsonx"),
+    data: test_1.subscope.b
+}

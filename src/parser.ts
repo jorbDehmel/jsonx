@@ -6,10 +6,9 @@
  * have weights
  */
 
-import assert = require("assert");
 import {BlobInstance, BlobManager} from "./blob_manager";
-import {ParseError, Pos, Token} from "./lexer";
 import {loadfJSONX} from "./jsonx";
+import {ParseError, Pos, Token} from "./lexer";
 
 /// "statically typed language" my foot
 function isString(data: unknown): data is string {
@@ -55,6 +54,9 @@ class JSONXVariableNode {
 
 ///
 class JSONX {
+  /// Static environment variables, if needed
+  static env: JSONX = new JSONX();
+
   /// If present, the superscope. If not, this is a global
   /// scope. Global scopes are allowed to have a BlobManager.
   private __parent?: JSONX;
@@ -103,7 +105,9 @@ class JSONX {
       }
     } else {
       if (value instanceof JSONX) {
-        assert(value.__blobManager == undefined);
+        if (value.__blobManager != undefined) {
+          throw new Error("Invalid blob manager hierarchy");
+        }
         value.__parent = this;
       }
       this.__variables.push(
@@ -131,6 +135,17 @@ class JSONX {
         return this;
       } else if (key == "parent") {
         return this.__parent;
+      } else if (key == "env") {
+        return JSONX.env;
+      } else if (key == "global") {
+        if (this.__parent == undefined) {
+          return this;
+        }
+        let cur = this.__parent;
+        while (cur.__parent != undefined) {
+          cur = cur.__parent;
+        }
+        return cur;
       }
 
       let out: JSONXVariableNode[] = [];
@@ -174,6 +189,84 @@ class JSONX {
 
     // Invalid index
     return undefined;
+  }
+
+  /// Write (a rough approximation of) the original JSONX string
+  stringify(tabbing: string = "", tab: string = "  "): string {
+    function stringifyValue(
+        value: JSONXVarType|(String | Number)[],
+        tabbing: string, tab: string): string {
+      if (Array.isArray(value)) {
+        return value.join('.');
+      } else if (value instanceof JSONX) {
+        return value.stringify(tabbing, tab);
+      } else if (value instanceof Token) {
+        return value.text;
+      } else if (value instanceof BlobInstance) {
+        throw new Error(
+            "BlobInstance stringify is unimplemented");
+      } else if (value instanceof JSONXLambdaBody) {
+        let out = value.args + " => ";
+        if (value.body instanceof Function) {
+          out += "...";
+        } else {
+          out += stringifyValue(value.body, tabbing + tab + tab,
+                                tab);
+        }
+        return out;
+      }
+    }
+
+    let out = "";
+
+    // If no variables, just do a unit scope
+    if (this.__variables.length == 0) {
+      out = "{}";
+    }
+
+    // If the variables are unnamed, this is an array
+    else if (this.__variables.at(0).name == undefined) {
+      out = "[\n";
+      let first = true;
+      for (let variable of this.__variables) {
+        if (first) {
+          first = false;
+        } else {
+          out += ",\n";
+        }
+        out += tabbing + tab +
+               stringifyValue(variable.value,
+                              tabbing + tab + tab, tab);
+      }
+      out += "\n" + tabbing + "]";
+    }
+
+    // Otherwise, this is a scope
+    else {
+      out = "{\n";
+      let first = true;
+      for (let variable of this.__variables) {
+        if (first) {
+          first = false;
+        } else {
+          out += ",\n";
+        }
+        out += tabbing + tab + variable.name;
+        // weight goes here
+        if (variable.weight != undefined) {
+          if (variable.weight >= 0) {
+            out += '!'.repeat(variable.weight);
+          } else {
+            out += '?'.repeat(-variable.weight);
+          }
+        }
+        out += ": " + stringifyValue(variable.value,
+                                     tabbing + tab + tab, tab);
+      }
+      out += "\n" + tabbing + "}";
+    }
+
+    return out;
   }
 }
 
@@ -371,9 +464,14 @@ function parseExpression(pos: Pos, context?: JSONX):
       didThing = true;
     } else if (next.text == "(") {
       // Lambda reduction
+      if (Array.isArray(obj)) {
+        obj = context.get(obj);
+      }
+
       // Ensure we are talking about a lambda
       if (!(obj instanceof JSONXLambdaBody)) {
-        throw new Error("");
+        console.log(obj);
+        throw new Error("Cannot call non-lambda");
       }
 
       // Parse call
@@ -417,18 +515,16 @@ function parseJSONX(lexed: Token[],
   return toReturn;
 }
 
-/// A static bundle of functions that should be included most
-/// of the time
-let std = new JSONX();
-std.insert('use', new JSONXLambdaBody('path', (_, arg) => {
-             return loadfJSONX((arg as Token).text);
-           }));
-std.insert('throw', new JSONXLambdaBody('message', (_, arg) => {
-             throw arg;
-           }));
-std.insert('print', new JSONXLambdaBody('string', (_, arg) => {
-             console.log(arg);
-             return arg;
-           }));
+JSONX.env.insert(
+    'loadf', new JSONXLambdaBody('path', (context, arg) => {
+      if (!(arg instanceof Token) || arg.type != "LIT") {
+        throw new Error(
+            "Cannot call 'env.loadf' without a string-token " +
+            "path");
+      }
+      let path = arg.text.substring(1, arg.text.length - 1);
+      return loadfJSONX(path, undefined, undefined,
+                        context as JSONX);
+    }));
 
-export {parseJSONX, JSONXVarType, JSONX, std};
+export {parseJSONX, JSONXVarType, JSONX};

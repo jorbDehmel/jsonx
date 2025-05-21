@@ -1,12 +1,11 @@
-"use strict";
-
-import {tokenize} from "../src/lexer";
-import {parseJSONX} from "../src/parser";
 
 /**
  * @file
  * @brief Tests the JSONX parser
  */
+
+import {tokenize} from "../src/lexer";
+import {parseJSONX} from "../src/parser";
 
 /// Parses, then prints. Implicitly tests that the string
 /// parses.

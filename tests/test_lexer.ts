@@ -1,5 +1,3 @@
-"use strict";
-
 /**
  * @file
  * @brief Tests the JSONX lexer/tokenizer

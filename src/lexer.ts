@@ -1,5 +1,3 @@
-'use strict';
-
 /**
  * @file
  * @brief Lexing/tokenization for JSONX documents

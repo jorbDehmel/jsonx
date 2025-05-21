@@ -1,5 +1,3 @@
-"use strict";
-
 /**
  * @file
  * @brief Manages blobs, what else is there to say

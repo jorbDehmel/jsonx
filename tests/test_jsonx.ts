@@ -1,13 +1,11 @@
-"use strict";
-
 /**
  * @file
  * @brief Tests the JSONX interpreter
  */
 
-import {loadsJSONX, JSONX} from "../src/jsonx";
-import {JSONXVarType} from "../src/parser";
+import {JSONX, loadfJSONX, loadsJSONX} from "../src/jsonx";
 import {Token} from "../src/lexer";
+import {JSONXVarType} from "../src/parser";
 
 function assert(condition: boolean): void {
   if (!condition) {
@@ -22,8 +20,8 @@ function main(): void {
   assert(a instanceof Token && a.type == "NUM" &&
          a.text == "123");
 
-  let obj = loadsJSONX("{value: 321}");
-  console.log(obj);
+  let obj = loadsJSONX("{value: 321}") as JSONX;
+  console.log(obj.stringify());
   if (obj instanceof JSONX) {
     a = obj.get("value");
     assert(a instanceof Token && a.type == "NUM" &&
@@ -32,8 +30,8 @@ function main(): void {
     throw new Error("Failed instance assertion");
   }
 
-  obj = loadsJSONX("{a: {b: true}}");
-  console.log(obj);
+  obj = loadsJSONX("{a: {b: true}}") as JSONX;
+  console.log(obj.stringify());
   if (obj instanceof JSONX) {
     a = obj.get("a");
     console.log(a);
@@ -48,40 +46,41 @@ function main(): void {
     throw new Error("Failed instance assertion");
   }
 
-  obj = loadsJSONX('{a?: 123, a: true, a!: "Hi there!"}');
-  console.log(obj);
+  obj = loadsJSONX('{a?: 123, a: true, a!: "Hi there!"}') as
+        JSONX;
+  console.log(obj.stringify());
   console.log((obj as JSONX).get("a"));
 
   assert(((obj as JSONX).get("a") as Token).text ==
          "\"Hi there!\"");
 
-  obj = loadsJSONX('[123, 321, 123]');
-  console.log(obj);
+  obj = loadsJSONX('[123, 321, 123]') as JSONX;
+  console.log(obj.stringify());
   assert(((obj as JSONX).get(1) as Token).text == "321");
 
-  obj = loadsJSONX("{a: false, b: this.a}");
-  console.log(obj);
+  obj = loadsJSONX("{a: false, b: this.a}") as JSONX;
+  console.log(obj.stringify());
   assert(((obj as JSONX).get(1) as Token).text == "false");
 
-  obj = loadsJSONX('{"a": false, "b": this."a"}');
-  console.log(obj);
+  obj = loadsJSONX('{"a": false, "b": this."a"}') as JSONX;
+  console.log(obj.stringify());
   assert(((obj as JSONX).get('b') as Token).text == "false");
 
-  obj = loadsJSONX('{a: "no", b: {a: "yes"}}');
-  console.log(obj);
+  obj = loadsJSONX('{a: "no", b: {a: "yes"}}') as JSONX;
+  console.log(obj.stringify());
   assert(((obj as JSONX).get([ "b", "a" ]) as Token).text ==
          '"yes"');
 
-  obj = loadsJSONX('{a: "no", b: {}}');
-  console.log(obj);
+  obj = loadsJSONX('{a: "no", b: {}}') as JSONX;
+  console.log(obj.stringify());
   assert((obj as JSONX).get([ "b", "a" ]) == undefined);
   assert(((obj as JSONX).get([ "this" ]) as JSONX) == obj);
   assert(((obj as JSONX).get([ "b" ]) as JSONX).get("parent") ==
          obj);
 
   // Circular dependency
-  obj = loadsJSONX('{a: this, b: this.a.b}');
-  console.log(obj);
+  obj = loadsJSONX('{a: this, b: this.a.b}') as JSONX;
+  console.log(obj.stringify());
   let failed = false;
   try {
     console.log((obj as JSONX).get("b"));
@@ -89,6 +88,14 @@ function main(): void {
     failed = true;
   }
   assert(failed);
+
+  // Loadf: Note that we are running from ..
+  let loaded =
+      loadfJSONX('./tests/files/test_1.jsonx') as JSONX;
+  console.log(loaded.stringify());
+
+  loaded = loadfJSONX('./tests/files/test_2.jsonx') as JSONX;
+  console.log(loaded.stringify());
 }
 
 main();

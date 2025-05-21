@@ -16,7 +16,7 @@ format:
 .PHONY: docs
 docs:
 	doxygen
-	make -C latex
+	@make -C latex > /dev/null
 	mv latex/refman.pdf .
 
 ################################################################

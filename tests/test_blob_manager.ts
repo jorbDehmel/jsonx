@@ -1,11 +1,9 @@
-"use strict";
-
 /**
  * @file
  * @brief
  */
 
-import {BlobManager, BlobInstance} from "../src/blob_manager";
+import {BlobInstance, BlobManager} from "../src/blob_manager";
 
 function assert(condition: boolean, msg?: string): void {
   if (!condition) {

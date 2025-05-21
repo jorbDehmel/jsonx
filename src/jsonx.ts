@@ -8,7 +8,7 @@ import {readFileSync} from "fs";
 
 import {BlobManager} from "./blob_manager";
 import {tokenize} from "./lexer";
-import {JSONX, JSONXVarType, parseJSONX, std} from "./parser";
+import {JSONX, JSONXVarType, parseJSONX} from "./parser";
 
 /**
  * @brief Load a JSONX-formatted string to a JS object
@@ -20,7 +20,8 @@ import {JSONX, JSONXVarType, parseJSONX, std} from "./parser";
  */
 function loadsJSONX(text: string, maxMs: number = 60_000,
                     maxBytesDA: number = 128_000,
-                    context?: JSONX): JSONXVarType|undefined {
+                    context?: JSONX,
+                    filepath?: string): JSONXVarType|undefined {
   // Set max bytes
   BlobManager.maxBytes = maxBytesDA;
 
@@ -36,7 +37,7 @@ function loadsJSONX(text: string, maxMs: number = 60_000,
   }
 
   // Lex
-  const tokens = tokenize(text);
+  const tokens = tokenize(text, filepath);
 
   // Parse
   const parsed = parseJSONX(tokens, context);
@@ -61,7 +62,7 @@ function loadfJSONX(filepath: string, maxMs: number = 60_000,
                     context?: JSONX): JSONXVarType|undefined {
   // Load file contents
   const text = readFileSync(filepath).toString();
-  return loadsJSONX(text, maxMs, maxBytesDA, context);
+  return loadsJSONX(text, maxMs, maxBytesDA, context, filepath);
 }
 
-export {loadsJSONX, loadfJSONX, JSONX, std};
+export {loadsJSONX, loadfJSONX, JSONX};
