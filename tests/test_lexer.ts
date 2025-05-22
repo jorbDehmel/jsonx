@@ -3,11 +3,11 @@
  * @brief Tests the JSONX lexer/tokenizer
  */
 
-import {Token, tokenize} from "../src/lexer";
+import {tokenize} from "../src/lexer";
 
 /// Assert that the lexed version of toLex matches expected
 function testCase(toLex: string, expected: string[]) {
-  let observedToks: Token[] = tokenize(toLex);
+  let observedToks = tokenize(toLex);
   let observed: string[] = [];
   observedToks.forEach((tok) => {
     observed.push(tok.text);

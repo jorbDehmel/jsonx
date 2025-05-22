@@ -6,6 +6,8 @@
  * have weights
  */
 
+import {readFileSync} from "fs";
+
 import {BlobInstance, BlobManager} from "./blob_manager";
 import {loadfJSONX} from "./jsonx";
 import {ParseError, Pos, Token} from "./lexer";
@@ -18,10 +20,20 @@ function isNumber(data: unknown): data is number {
   return typeof data === 'number';
 }
 
-///
-type JSONXVarType = JSONX|Token|BlobInstance|JSONXLambdaBody;
+function isInteger(data: string): boolean {
+  const intOrNaN = +data;
+  if (isNaN(intOrNaN)) {
+    // Not convertable to a number at all
+    return false;
+  } else {
+    return Number.isInteger(intOrNaN);
+  }
+}
 
-///
+/// The type of a variable
+type JSONXVarType = JSONX|BlobInstance|JSONXLambdaBody;
+
+/// A lambda body which can be evaluated
 class JSONXLambdaBody {
   args: String;
   body: JSONXVarType|((thisJSONX: JSONXVarType,
@@ -34,7 +46,8 @@ class JSONXLambdaBody {
     this.body = body;
   }
 
-  call(thisJSONX: JSONX, args: JSONXVarType): JSONXVarType {
+  call(thisJSONX: JSONXVarType,
+       args: JSONXVarType): JSONXVarType {
     if (this.body instanceof Function) {
       // External call
       return this.body(thisJSONX, args);
@@ -61,32 +74,17 @@ class JSONX {
   /// scope. Global scopes are allowed to have a BlobManager.
   private __parent?: JSONX;
 
-  /// Present only if this is a global scope. Instantiated on
-  /// first request.
-  private __blobManager?: BlobManager;
-
   /// The variables in this scope
-  private __variables: JSONXVariableNode[];
+  variables: JSONXVariableNode[];
 
   /// Create a root node
   constructor(parent?: JSONX) {
     this.__parent = parent;
-    this.__blobManager = undefined;
-    this.__variables = [];
-  }
-
-  /// Finds the nearest blob manager and returns it
-  get blobManager(): BlobManager {
-    if (this.__parent != undefined) {
-      return this.__parent.blobManager;
-    } else if (this.__blobManager == undefined) {
-      this.__blobManager = new BlobManager();
-    }
-    return this.__blobManager;
+    this.variables = [];
   }
 
   /// Append a new child to the tree
-  insert(key?: String|String[],
+  insert(key?: String|(String[]),
          value?: JSONXVarType|(Number|String)[],
          weight?: number): JSONXVariableNode {
     if (Array.isArray(key)) {
@@ -98,21 +96,24 @@ class JSONX {
       } else {
         let localName = key[0];
         key.splice(0, 1);
-        let newScope =
-            this.insert(localName, new JSONX(this)).value as
-            JSONX;
+        let newScope: JSONX;
+        let found = this.get(localName);
+        if (found instanceof JSONX) {
+          newScope = found;
+        } else {
+          newScope =
+              this.insert(localName, new JSONX(this)).value as
+              JSONX;
+        }
         return newScope.insert(key, value, weight);
       }
     } else {
       if (value instanceof JSONX) {
-        if (value.__blobManager != undefined) {
-          throw new Error("Invalid blob manager hierarchy");
-        }
         value.__parent = this;
       }
-      this.__variables.push(
+      this.variables.push(
           {name : key, value : value, weight : weight});
-      return this.__variables[this.__variables.length - 1];
+      return this.variables[this.variables.length - 1];
     }
   }
 
@@ -149,7 +150,7 @@ class JSONX {
       }
 
       let out: JSONXVariableNode[] = [];
-      for (const variable of this.__variables) {
+      for (const variable of this.variables) {
         if (variable.name != undefined &&
             variable.name == key) {
           out.push(variable);
@@ -176,10 +177,10 @@ class JSONX {
         return this.get(out[0].value);
       }
     } else if (isNumber(key) &&
-               key as number < this.__variables.length) {
+               key as number < this.variables.length) {
       // Index
       // NOTE: Indexed items cannot use weights!
-      const toReturn = this.__variables[key as number].value;
+      const toReturn = this.variables[key as number].value;
       if (!Array.isArray(toReturn)) {
         return toReturn;
       } else {
@@ -191,6 +192,15 @@ class JSONX {
     return undefined;
   }
 
+  get length(): number {
+    return this.variables.length;
+  }
+
+  get isArray(): boolean {
+    return this.length == 0 ||
+           this.variables.at(0).name == undefined;
+  }
+
   /// Write (a rough approximation of) the original JSONX string
   stringify(tabbing: string = "", tab: string = "  "): string {
     function stringifyValue(
@@ -200,11 +210,8 @@ class JSONX {
         return value.join('.');
       } else if (value instanceof JSONX) {
         return value.stringify(tabbing, tab);
-      } else if (value instanceof Token) {
-        return value.text;
       } else if (value instanceof BlobInstance) {
-        throw new Error(
-            "BlobInstance stringify is unimplemented");
+        return value.getString();
       } else if (value instanceof JSONXLambdaBody) {
         let out = value.args + " => ";
         if (value.body instanceof Function) {
@@ -220,15 +227,15 @@ class JSONX {
     let out = "";
 
     // If no variables, just do a unit scope
-    if (this.__variables.length == 0) {
+    if (this.variables.length == 0) {
       out = "{}";
     }
 
     // If the variables are unnamed, this is an array
-    else if (this.__variables.at(0).name == undefined) {
+    else if (this.isArray) {
       out = "[\n";
       let first = true;
-      for (let variable of this.__variables) {
+      for (let variable of this.variables) {
         if (first) {
           first = false;
         } else {
@@ -245,7 +252,7 @@ class JSONX {
     else {
       out = "{\n";
       let first = true;
-      for (let variable of this.__variables) {
+      for (let variable of this.variables) {
         if (first) {
           first = false;
         } else {
@@ -345,9 +352,11 @@ function parseIdentifierRHS(pos: Pos): (String|Number)[] {
 
     const tok = pos.next();
     if (tok.type == "ID") {
-      out.push(tok.text as String);
-    } else if (tok.type == "NUM") {
-      out.push(Number.parseInt(tok.text) as Number);
+      if (isInteger(tok.text)) {
+        out.push(Number.parseInt(tok.text) as Number);
+      } else {
+        out.push(tok.text as String);
+      }
     } else if (tok.text.startsWith('"') ||
                tok.text.startsWith('\'') ||
                tok.text.startsWith('`')) {
@@ -369,7 +378,7 @@ function parseIdentifierLHS(pos: Pos): String {
   if (pos.peek().text == ".") {
     throw new Error(
         "LHS identifiers must contain exactly one token");
-  } else if (tok.type == "NUM") {
+  } else if (isInteger(tok.text)) {
     throw new Error("LHS identifiers must not be indices");
   } else {
     if (tok.text.startsWith('"') || tok.text.startsWith('\'') ||
@@ -431,22 +440,27 @@ function parseExpression(pos: Pos, context?: JSONX):
     obj = parseScope(pos, context);
   }
 
-  else if (tok.type == "ID") {
+  else if (tok.type == "ID" && !isInteger(tok.text)) {
     // Identifier CHAIN referring to an existing value
     obj = parseIdentifierRHS(pos);
-  } else if (tok.type == "LIT" || tok.type == "NUM") {
-    // Single-token literal
-    obj = tok;
+  } else if (tok.type == "LIT" || tok.type == "ID") {
+    // Single-token literal (string, bool, or non-index ID)
+    obj = new BlobInstance();
+    obj.set(BlobManager.encoder.encode(tok.text));
 
     // Advance to first tok after literal
     pos.next();
+  } else {
+    throw new Error(`Failed to parse token '${tok.text}'`);
   }
 
   let didThing = true;
   while (didThing) {
     didThing = false;
     const next = pos.peek();
-    if (next.text == "=>") {
+    if (next.type == "EOF") {
+      break;
+    } else if (next.text == "=>") {
       // Lambda def
       if (!Array.isArray(obj) || obj.length != 1 ||
           !isString(obj[0])) {
@@ -487,7 +501,7 @@ function parseExpression(pos: Pos, context?: JSONX):
       obj = obj.call(context, args);
       didThing = true;
     } else if (pos.peek().type == "MATH") {
-      // Binary math ops
+      // Binary math operations
       throw new Error("Math is unimplemented");
       didThing = true;
     }
@@ -501,7 +515,7 @@ function parseExpression(pos: Pos, context?: JSONX):
 /// Parse from token stream
 function parseJSONX(lexed: Token[],
                     context?: JSONX): JSONXVarType|undefined {
-  if (lexed.length == 0) {
+  if (lexed.length < 2) {
     return undefined;
   }
 
@@ -515,16 +529,118 @@ function parseJSONX(lexed: Token[],
   return toReturn;
 }
 
+/// Load a file as a scope
 JSONX.env.insert(
     'loadf', new JSONXLambdaBody('path', (context, arg) => {
-      if (!(arg instanceof Token) || arg.type != "LIT") {
-        throw new Error(
-            "Cannot call 'env.loadf' without a string-token " +
-            "path");
-      }
-      let path = arg.text.substring(1, arg.text.length - 1);
-      return loadfJSONX(path, undefined, undefined,
-                        context as JSONX);
+      const pathStr = (arg as BlobInstance).getString()!;
+      return loadfJSONX(
+          pathStr.substring(1, pathStr.length - 1), undefined,
+          undefined, context as JSONX);
     }));
+
+/// Load a file as a raw blob
+JSONX.env.insert(
+    'rawf', new JSONXLambdaBody('path', (context, arg) => {
+      let contents = arg as BlobInstance;
+      const path = contents.getString();
+      contents.set(
+          readFileSync(path.substring(1, path.length - 1)));
+      return contents;
+    }));
+
+/// Localize
+JSONX.env.insert(
+    'include',
+    new JSONXLambdaBody('path_or_jsonx', (context, arg) => {
+      if (!(context instanceof JSONX)) {
+        throw new Error("'include' must be called within an " +
+                        "array or scope");
+      } else if (arg instanceof JSONXLambdaBody) {
+        throw new Error(
+            "Cannot use lambda body as argument to 'include'");
+      } else if (arg instanceof BlobInstance) {
+        // Filepath to open, then localize
+        return (JSONX.env.get("include") as JSONXLambdaBody)
+            .call(context,
+                  (JSONX.env.get("loadf") as JSONXLambdaBody)
+                      .call(context, arg));
+      } else {
+        // JSONX to localize
+        if (context.isArray != arg.isArray) {
+          throw new Error(
+              "Cannot call include on an array from a " +
+              "scope or vice versa");
+        } else {
+          for (let i = 0; i < arg.length; ++i) {
+            const variable = arg.variables.at(i);
+            context.insert(variable.name, variable.value,
+                           variable.weight);
+          }
+          return arg;
+        }
+      }
+    }));
+
+["E", "LN10", "LN2", "LOG2E", "LOG10E", "PI", "SQRT1_2",
+ "SQRT2", "abs", "acos", "asin", "atan", "ceil", "cos", "exp",
+ "floor", "log", "max", "min", "pow", "round", "sin", "sqrt",
+ "tan"]
+    .forEach((value) => {
+      if (isNumber(Math[value] as any)) {
+        // Raw numbers
+        let toAdd = new BlobInstance();
+        toAdd.set(
+            BlobManager.encoder.encode(Math[value].toString()));
+        JSONX.env.insert([ "math", value ], toAdd);
+      } else if (value == "max" || value == "min") {
+        // Array-input functions
+        JSONX.env.insert(
+            [ "math", value ],
+            new JSONXLambdaBody('arg', (context, arg) => {
+              let input: number[] = [];
+              for (let i = 0; i < (arg as JSONX).length; ++i) {
+                input.push(Number.parseInt(
+                    ((arg as JSONX).get(i) as BlobInstance)
+                        .getString()));
+              }
+              let out = new BlobInstance();
+              out.set(BlobManager.encoder.encode(
+                  ((Math[value] as any)(input) as Number)
+                      .toString()));
+              return out;
+            }));
+      } else if (value == "pow") {
+        // Two-argument function
+        // env.math.pow({base: 123, exp: 123})
+        JSONX.env.insert(
+            [ "math", value ],
+            new JSONXLambdaBody('arg', (context, arg) => {
+              const base = Number.parseInt(
+                  ((arg as JSONX).get("base") as BlobInstance)
+                      .getString());
+              const exp = Number.parseInt(
+                  ((arg as JSONX).get("exp") as BlobInstance)
+                      .getString());
+              let out = new BlobInstance();
+              out.set(BlobManager.encoder.encode(
+                  ((Math[value] as any)(base, exp) as Number)
+                      .toString()));
+              return out;
+            }));
+      } else {
+        // Single-argument functions
+        JSONX.env.insert(
+            [ "math", value ],
+            new JSONXLambdaBody('arg', (context, arg) => {
+              const x = Number.parseInt(
+                  (arg as BlobInstance).getString());
+              let out = new BlobInstance();
+              out.set(BlobManager.encoder.encode(
+                  ((Math[value] as any)(x) as Number)
+                      .toString()));
+              return out;
+            }));
+      }
+    });
 
 export {parseJSONX, JSONXVarType, JSONX};

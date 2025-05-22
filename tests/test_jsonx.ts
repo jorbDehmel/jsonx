@@ -3,9 +3,8 @@
  * @brief Tests the JSONX interpreter
  */
 
+import {BlobInstance, BlobManager} from "../src/blob_manager";
 import {JSONX, loadfJSONX, loadsJSONX} from "../src/jsonx";
-import {Token} from "../src/lexer";
-import {JSONXVarType} from "../src/parser";
 
 function assert(condition: boolean): void {
   if (!condition) {
@@ -15,17 +14,15 @@ function assert(condition: boolean): void {
 
 /// Runs test cases
 function main(): void {
-  let a: JSONXVarType = loadsJSONX('123');
+  let a = loadsJSONX('123');
   console.log(a);
-  assert(a instanceof Token && a.type == "NUM" &&
-         a.text == "123");
+  assert((a as BlobInstance).getString() == "123");
 
   let obj = loadsJSONX("{value: 321}") as JSONX;
   console.log(obj.stringify());
   if (obj instanceof JSONX) {
     a = obj.get("value");
-    assert(a instanceof Token && a.type == "NUM" &&
-           a.text == "321");
+    assert((a as BlobInstance).getString() == "321");
   } else {
     throw new Error("Failed instance assertion");
   }
@@ -37,8 +34,7 @@ function main(): void {
     console.log(a);
     if (a instanceof JSONX) {
       let b = a.get("b");
-      assert(b instanceof Token && b.type == "LIT" &&
-             b.text == "true");
+      assert((b as BlobInstance).getString() == "true");
     } else {
       throw new Error("Failed instance assertion");
     }
@@ -51,25 +47,30 @@ function main(): void {
   console.log(obj.stringify());
   console.log((obj as JSONX).get("a"));
 
-  assert(((obj as JSONX).get("a") as Token).text ==
-         "\"Hi there!\"");
+  assert(
+      ((obj as JSONX).get("a") as BlobInstance).getString() ==
+      "\"Hi there!\"");
 
   obj = loadsJSONX('[123, 321, 123]') as JSONX;
   console.log(obj.stringify());
-  assert(((obj as JSONX).get(1) as Token).text == "321");
+  assert(((obj as JSONX).get(1) as BlobInstance).getString() ==
+         "321");
 
   obj = loadsJSONX("{a: false, b: this.a}") as JSONX;
   console.log(obj.stringify());
-  assert(((obj as JSONX).get(1) as Token).text == "false");
+  assert(((obj as JSONX).get(1) as BlobInstance).getString() ==
+         "false");
 
   obj = loadsJSONX('{"a": false, "b": this."a"}') as JSONX;
   console.log(obj.stringify());
-  assert(((obj as JSONX).get('b') as Token).text == "false");
+  assert(
+      ((obj as JSONX).get('b') as BlobInstance).getString() ==
+      "false");
 
   obj = loadsJSONX('{a: "no", b: {a: "yes"}}') as JSONX;
   console.log(obj.stringify());
-  assert(((obj as JSONX).get([ "b", "a" ]) as Token).text ==
-         '"yes"');
+  assert(((obj as JSONX).get([ "b", "a" ]) as BlobInstance)
+             .getString() == '"yes"');
 
   obj = loadsJSONX('{a: "no", b: {}}') as JSONX;
   console.log(obj.stringify());
@@ -96,6 +97,19 @@ function main(): void {
 
   loaded = loadfJSONX('./tests/files/test_2.jsonx') as JSONX;
   console.log(loaded.stringify());
+
+  console.log(JSONX.env.stringify());
+
+  loaded = loadfJSONX('./tests/files/test_3.jsonx') as JSONX;
+  console.log(loaded.stringify());
+  console.log(loaded.get("local_e"));
+
+  loaded = loadfJSONX('./tests/files/test_4.jsonx') as JSONX;
+  console.log(loaded.stringify());
+  console.log(loaded.get("val"));
+
+  console.log(
+      `Blob usage: ${BlobManager.percentUsed.toPrecision(2)}%`);
 }
 
 main();

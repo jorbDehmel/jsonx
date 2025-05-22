@@ -1,6 +1,6 @@
 // Tests comments,
 /* As well as `env` */
-// And some basic file ops
+// And some basic file operations
 {
     loadf: env.loadf,
     test_1?: loadf("./tests/files/test_1.jsonx"),

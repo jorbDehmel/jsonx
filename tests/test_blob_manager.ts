@@ -16,31 +16,33 @@ function assert(condition: boolean, msg?: string): void {
 function main() {
   let encoder = new TextEncoder();
   let decoder = new TextDecoder();
-  let manager = new BlobManager(8);
-  assert(manager.usage() == 0);
 
-  let a = new BlobInstance(manager);
-  assert(manager.usage() == 0);
+  BlobManager.maxBytes = 8;
+  let manager = BlobManager.instance;
+  assert(BlobManager.bytesUsed == 0);
+
+  let a = new BlobInstance();
+  assert(BlobManager.bytesUsed == 0);
 
   // Allocate all the allowed memory
   a.set(encoder.encode("Hi there"));
-  assert(manager.usage() == 8);
+  assert(BlobManager.bytesUsed == 8);
 
   // This points to the same data
   let b = a.duplicate();
-  assert(manager.usage() == 8);
+  assert(BlobManager.bytesUsed == 8);
 
   // Should still be at 8 bytes usage after this
   a.free();
-  assert(manager.usage() == 8);
+  assert(BlobManager.bytesUsed == 8);
 
   // Valid if the data wasn't deleted
   assert(decoder.decode(b.get()) == "Hi there",
-         'Failed to get setted data');
+         'Failed to get set-ed data');
 
   // Attempt to allocate beyond the allowed amount
   a = b.duplicate();
-  assert(manager.usage() == 8);
+  assert(BlobManager.bytesUsed == 8);
 
   // Should throw an error
   let didFail = false;

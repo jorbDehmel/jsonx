@@ -1,0 +1,5 @@
+// Tests the `include` thing
+{
+  math: include(env.math), // Note: Returns `env.math`
+  val: acos(1)
+}

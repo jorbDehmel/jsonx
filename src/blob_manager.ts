@@ -6,43 +6,53 @@
 /// A lent-out copy-on-write pointer to shared
 /// memory
 class BlobInstance {
-  /// The allocation manager owning this instance
-  owner: BlobManager;
-
-  /// Create a new allocation
-  constructor(owner: BlobManager) {
-    this.owner = owner;
-  }
-
   /// Creates a new pointer to the same data
   duplicate(): BlobInstance {
-    return this.owner.duplicate(this);
+    return BlobManager.instance.duplicate(this);
   }
 
   /// Free this allocation
   free() {
-    this.owner.free(this);
+    BlobManager.instance.free(this);
   }
 
   /// True iff we own data
   has(): boolean {
-    return this.owner.has(this);
+    return BlobManager.instance.has(this);
   }
 
   /// Get the allocation data
   get(): Uint8Array|undefined {
-    return this.owner.get(this);
+    return BlobManager.instance.get(this);
+  }
+
+  /// Get the allocation data as a string
+  getString(): string|undefined {
+    const out = this.get();
+    if (out == undefined) {
+      return undefined;
+    }
+    return BlobManager.decoder.decode(this.get());
   }
 
   /// Set the allocation data
   set(newData: Uint8Array) {
-    this.owner.set(this, newData);
+    BlobManager.instance.set(this, newData);
   }
 }
 
 /// Lends out blob instances which point to internal memory.
 /// Blobs are copy-on-write only
 class BlobManager {
+  /// Singleton instance
+  static instance = new BlobManager();
+
+  ///
+  static encoder = new TextEncoder();
+
+  ///
+  static decoder = new TextDecoder();
+
   /// Maps allocation IDs to allocations
   private allocations = new Map<Number, Uint8Array>();
 
@@ -53,22 +63,26 @@ class BlobManager {
   /// Maps lent shared pointers to their allocation IDs
   private pointers = new Map<BlobInstance, Number>();
 
-  /// A queue of freed IDs to use before creating a new one
+  /// A queue of free-d IDs to use before creating a new one
   private nextAllocationIDs = [];
 
   /// The next ID to add
   private nextToAdd = 0;
 
   /// The current number of used bytes
-  private bytesUsed: number = 0;
+  static bytesUsed: number = 0;
 
   /// The max number of bytes
   static maxBytes?: number = 1024 * 64;
 
-  /// Initialize w/ some max number of bytes
-  constructor(maxBytes?: number) {
-    if (maxBytes != undefined) {
-      BlobManager.maxBytes = maxBytes;
+  static get percentUsed(): number {
+    if (BlobManager.maxBytes == undefined) {
+      return 0.0;
+    } else if (BlobManager.maxBytes == 0) {
+      return 100.0;
+    } else {
+      return 100.0 *
+             (BlobManager.bytesUsed / BlobManager.maxBytes);
     }
   }
 
@@ -79,7 +93,7 @@ class BlobManager {
 
   /// Create a copy
   duplicate(who: BlobInstance): BlobInstance {
-    let out = new BlobInstance(this);
+    let out = new BlobInstance();
     if (this.has(who)) {
       // Duplicate pointer to same allocation
       const allocationID = this.pointers.get(who);
@@ -101,15 +115,20 @@ class BlobManager {
     if (this.allocationViewIDs.get(ID).size == 0) {
       // No more pointers to this allocation! Delete it
       this.allocationViewIDs.delete(ID);
-      this.bytesUsed -= this.allocations.get(ID).length;
+      BlobManager.bytesUsed -= this.allocations.get(ID).length;
       this.allocations.delete(ID);
       this.nextAllocationIDs.push(ID);
     }
   }
 
-  /// Return the number of bytes used
-  usage(): number {
-    return this.bytesUsed;
+  /// Remove everything
+  purge(): void {
+    this.allocationViewIDs.clear();
+    this.allocations.clear();
+    this.pointers.clear();
+    this.nextAllocationIDs = [];
+    BlobManager.bytesUsed = 0;
+    this.nextToAdd = 0;
   }
 
   /// Get a read-only view of the data
@@ -125,7 +144,8 @@ class BlobManager {
     this.free(who);
 
     if (BlobManager.maxBytes != undefined &&
-        this.bytesUsed + what.length > BlobManager.maxBytes) {
+        BlobManager.bytesUsed + what.length >
+            BlobManager.maxBytes) {
       throw Error(`BlobManager allocation of ${
           what.length} bytes would overrun max of ${
           BlobManager.maxBytes} bytes`);
@@ -138,7 +158,7 @@ class BlobManager {
     }
     const ID = this.nextAllocationIDs.pop();
 
-    this.bytesUsed += what.length;
+    BlobManager.bytesUsed += what.length;
     this.allocations.set(ID, new Uint8Array(what));
     this.allocationViewIDs.set(ID,
                                new Set<BlobInstance>([ who ]));

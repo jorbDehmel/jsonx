@@ -1,0 +1,8 @@
+{
+  atan: env.math.atan,
+  atan_out: atan(1),
+  local_e: env.math.E,
+  exponentiated: env.math.pow({
+    base: 2, exp: 10
+  })
+}

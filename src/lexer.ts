@@ -3,13 +3,21 @@
  * @brief Lexing/tokenization for JSONX documents
  */
 
+/// LIT tokens will become blob literals (be they
+/// strings, numbers, bools, etc) unless they are found to be
+/// part of an identifier, OP tokens are syntax operators,
+/// MATH tokens are mathematical operators, and ID tokens
+/// refer to names. EOF tokens signify that we have passed the
+/// end of the lex-ed token stream.
+type TokenType = "LIT"|"OP"|"MATH"|"ID"|"EOF";
+
 /// A single token in a token stream
 class Token {
   /// The text of the token
   text: string;
 
-  /// The type (LIT, NUM, OP, MATH, or ID)
-  type: string;
+  /// The type as determined at lex-time
+  type: TokenType;
 
   /// The file of origin
   file?: string;
@@ -21,7 +29,7 @@ class Token {
   col?: number;
 
   /// Construct with some optional junk, but at least text
-  constructor(text: string, type?: string, file?: string,
+  constructor(text: string, type?: TokenType, file?: string,
               line?: number, col?: number) {
     this.text = text;
     this.file = file;
@@ -49,11 +57,6 @@ class Token {
                this.text.startsWith("'") ||
                this.text.startsWith("`")) {
         this.type = "LIT";
-      }
-
-      // Numbers
-      else if ('0' <= this.text[0] && this.text[0] <= '9') {
-        this.type = "NUM";
       }
 
       // Operators
@@ -90,14 +93,14 @@ function tokenize(src: string, filepath?: string): Token[] {
       "([ \\t\\r\\n]+)|" +                       // Whitespace
           "(\\/\\/.*|\\/\\*[\\s\\S]*?\\*\\/)|" + // Comments
           "(" + // Non-junk stuff
-          "[\\{\\}\\[\\]\\(\\):\\+\\-\\*\\/%<>!,\\?]|" + // Single
+          "[\\{\\}\\[\\]\\(\\):\\+\\-\\*\\/%<>!,\\?]|" +
           "=>|\\+\\+|--|==|!=|===|!==|<=|>=|&&|\\|\\||" + // Ops
           "[A-Za-z_$][A-Za-z0-9_$]*|" + // Identifier
           "b16'([0-9A-Fa-f]+)'|b64'([A-Za-z0-9+/=]+)'|" + // Bin
           "`(?:\\.|\\$\\{|\\}|[^`])*`|" + // Format strings
           "'(?:\\.|[^'])*'|\"(?:\\.|[^\"])*\"|" + // Normal
                                                   // strings
-          "\\.{3}|\\.|" + // Dots and elipsis
+          "\\.{3}|\\.|" + // Dots and ellipsis
           "[0-9]+(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?n?" + // Nums
           ")",
       "g");
@@ -203,7 +206,7 @@ class Pos {
   peek() {
     if (this.pos >= this.tokens.length) {
       // Out of range!
-      return new Token("<EOF>", "EOF");
+      return new Token("EOF", "EOF");
     } else {
       // Not out of range.
       let tok = this.tokens[this.pos];
