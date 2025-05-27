@@ -9,8 +9,7 @@
 import {readFileSync} from "fs";
 
 import {BlobInstance, BlobManager} from "./blob_manager";
-import {loadfJSONX} from "./jsonx";
-import {ParseError, Pos, Token} from "./lexer";
+import {ParseError, Pos, Token, tokenize} from "./lexer";
 
 /// "statically typed language" my foot
 function isString(data: unknown): data is string {
@@ -29,9 +28,6 @@ function isInteger(data: string): boolean {
     return Number.isInteger(intOrNaN);
   }
 }
-
-/// The type of a variable
-type JSONXVarType = JSONX|BlobInstance|JSONXLambdaBody;
 
 /// A lambda body which can be evaluated
 class JSONXLambdaBody {
@@ -58,6 +54,9 @@ class JSONXLambdaBody {
   }
 }
 
+/// The type of a variable
+type JSONXVarType = JSONX|BlobInstance|JSONXLambdaBody;
+
 /// Can represent a variable, scope, or whatever else.
 class JSONXVariableNode {
   name?: String;
@@ -65,7 +64,7 @@ class JSONXVariableNode {
   weight?: number = 0;
 }
 
-///
+/// A nestable, queryable, parsed JSONX object
 class JSONX {
   /// Static environment variables, if needed
   static env: JSONX = new JSONX();
@@ -275,6 +274,61 @@ class JSONX {
 
     return out;
   }
+
+  /**
+   * @brief Load a JSONX-formatted string to a JS object
+   * @param text The JSONX text to load
+   * @param maxMs The max number of ms to give the process
+   * @param maxBytesDA The max number of bytes dynamically
+   *     allocatable
+   * @returns The JS object represented by the JSONX text
+   */
+  static loads(text: string, maxMs: number = 60_000,
+               maxBytesDA: number = 128_000, context?: JSONX,
+               filepath?: string): JSONXVarType|undefined {
+    // Set max bytes
+    BlobManager.maxBytes = maxBytesDA;
+
+    // If a max time was given, start a timer
+    let timeoutID: NodeJS.Timeout;
+    if (maxMs != undefined) {
+      timeoutID = setTimeout(
+          () => {
+            throw Error(`Exceeded loadsJSONX time limit of ${
+                maxMs} ms`);
+          },
+      );
+    }
+
+    // Lex
+    const tokens = tokenize(text, filepath);
+
+    // Parse
+    const parsed = parseJSONX(tokens, context);
+
+    // If we have a timer running, cancel it
+    if (maxMs != undefined) {
+      clearTimeout(timeoutID);
+    }
+    return parsed;
+  }
+
+  /**
+   * @brief Load a JSONX-formatted file to a JS object
+   * @param text The filepath of a JSONX file to load
+   * @param maxMs The max number of ms to give the process
+   * @param maxBytesDA The max number of bytes dynamically
+   *     allocatable
+   * @returns The JS object represented by the JSONX text
+   */
+  static loadf(filepath: string, maxMs: number = 60_000,
+               maxBytesDA: number = 128_000,
+               context?: JSONX): JSONXVarType|undefined {
+    // Load file contents
+    const text = readFileSync(filepath).toString();
+    return JSONX.loads(text, maxMs, maxBytesDA, context,
+                       filepath);
+  }
 }
 
 /// Turns a token stream (manages by the Pos arg) and turns it
@@ -464,7 +518,6 @@ function parseExpression(pos: Pos, context?: JSONX):
       // Lambda def
       if (!Array.isArray(obj) || obj.length != 1 ||
           !isString(obj[0])) {
-        console.log(obj);
         throw new Error(
             "Lambda argument must be a single LHS identifier");
       }
@@ -484,7 +537,6 @@ function parseExpression(pos: Pos, context?: JSONX):
 
       // Ensure we are talking about a lambda
       if (!(obj instanceof JSONXLambdaBody)) {
-        console.log(obj);
         throw new Error("Cannot call non-lambda");
       }
 
@@ -533,7 +585,7 @@ function parseJSONX(lexed: Token[],
 JSONX.env.insert(
     'loadf', new JSONXLambdaBody('path', (context, arg) => {
       const pathStr = (arg as BlobInstance).getString()!;
-      return loadfJSONX(
+      return JSONX.loadf(
           pathStr.substring(1, pathStr.length - 1), undefined,
           undefined, context as JSONX);
     }));
@@ -566,18 +618,14 @@ JSONX.env.insert(
                       .call(context, arg));
       } else {
         // JSONX to localize
-        if (context.isArray != arg.isArray) {
-          throw new Error(
-              "Cannot call include on an array from a " +
-              "scope or vice versa");
-        } else {
-          for (let i = 0; i < arg.length; ++i) {
-            const variable = arg.variables.at(i);
-            context.insert(variable.name, variable.value,
-                           variable.weight);
-          }
-          return arg;
+        for (let i = 0; i < arg.length; ++i) {
+          const variable = arg.variables.at(i);
+          context.insert(variable.name, variable.value,
+                         variable.weight);
         }
+        let toReturn = new BlobInstance();
+        toReturn.set(BlobManager.encoder.encode('true'));
+        return toReturn;
       }
     }));
 
@@ -643,4 +691,4 @@ JSONX.env.insert(
       }
     });
 
-export {parseJSONX, JSONXVarType, JSONX};
+export {JSONXVarType, JSONX};

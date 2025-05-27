@@ -1,5 +1,5 @@
 // Tests the `include` thing
 {
-  math: include(env.math), // Note: Returns `env.math`
-  val: acos(1)
+  _: env.include(env.math) // Newline counts as comma
+  val: acos(1),,,,, // Commas are ignored
 }

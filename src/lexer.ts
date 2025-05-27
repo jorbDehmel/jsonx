@@ -93,7 +93,7 @@ function tokenize(src: string, filepath?: string): Token[] {
       "([ \\t\\r\\n]+)|" +                       // Whitespace
           "(\\/\\/.*|\\/\\*[\\s\\S]*?\\*\\/)|" + // Comments
           "(" + // Non-junk stuff
-          "[\\{\\}\\[\\]\\(\\):\\+\\-\\*\\/%<>!,\\?]|" +
+          "[\\{\\}\\[\\]\\(\\):\\+\\-\\*\\/%<>!,;\\?]|" +
           "=>|\\+\\+|--|==|!=|===|!==|<=|>=|&&|\\|\\||" + // Ops
           "[A-Za-z_$][A-Za-z0-9_$]*|" + // Identifier
           "b16'([0-9A-Fa-f]+)'|b64'([A-Za-z0-9+/=]+)'|" + // Bin
@@ -112,6 +112,10 @@ function tokenize(src: string, filepath?: string): Token[] {
   while ((match = re.exec(src)) !== null) {
     for (const c of match[0]) {
       if (c == '\n') {
+        // Newlines count as commas
+        tokens.push(
+            new Token(',', undefined, filepath, line, col - 1));
+
         ++line;
         col = 0;
       } else {
@@ -122,10 +126,15 @@ function tokenize(src: string, filepath?: string): Token[] {
     if (match[1] || match[0].startsWith('//') ||
         match[0].startsWith('/*')) {
       continue; // skip whitespace/comments
+    } else if (match[0] == ';') {
+      // Semicolons count as commas
+      tokens.push(
+          new Token(',', undefined, filepath, line, col - 1));
+    } else {
+      const tk = match[0];
+      tokens.push(new Token(tk, undefined, filepath, line,
+                            col - tk.length));
     }
-    const tk = match[0];
-    tokens.push(new Token(tk, undefined, filepath, line,
-                          col - tk.length));
   }
   tokens.push(new Token('EOF', 'EOF', filepath, line, col));
   return tokens;

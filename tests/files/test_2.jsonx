@@ -2,7 +2,7 @@
 /* As well as `env` */
 // And some basic file operations
 {
-    loadf: env.loadf,
+    loadf: env.loadf; // Semicolons count as commas
     test_1?: loadf("./tests/files/test_1.jsonx"),
     data: test_1.subscope.b
 }
