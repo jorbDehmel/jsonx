@@ -113,8 +113,6 @@ function tokenize(src: string, filepath?: string): Token[] {
     for (const c of match[0]) {
       if (c == '\n') {
         // Newlines count as commas
-        tokens.push(
-            new Token(',', undefined, filepath, line, col - 1));
 
         ++line;
         col = 0;

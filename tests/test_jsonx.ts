@@ -97,19 +97,42 @@ function main(): void {
   let loaded =
       JSONX.loadf('./tests/files/test_1.jsonx') as JSONX;
   console.log(loaded.stringify());
+  assert((loaded.get("a") as BlobInstance).getString() ==
+         '123');
+  assert(<BlobInstance>(loaded.get("b")).getString() == '123');
+  assert(<BlobInstance>(loaded.get([ "subscope", "a" ]))
+             .getString() == '123');
+  assert(<BlobInstance>(loaded.get([ "subscope", "b" ]))
+             .getString() == '321');
 
   loaded = JSONX.loadf('./tests/files/test_2.jsonx') as JSONX;
   console.log(loaded.stringify());
-
-  console.log(JSONX.env.stringify());
+  assert(interpret<BlobInstance>(loaded.get([ "test_1", "a" ]))
+             .getString() == '123');
+  assert(
+      interpret<BlobInstance>(loaded.get("data")).getString() ==
+      '321');
 
   loaded = JSONX.loadf('./tests/files/test_3.jsonx') as JSONX;
   console.log(loaded.stringify());
   console.log(loaded.get("local_e"));
+  assert(
+      Math.abs(+interpret<BlobInstance>(loaded.get('local_e'))
+                    .getString() -
+               Math.E) < 0.01);
+  assert(interpret<BlobInstance>(loaded.get('exponentiated'))
+             .getString() == '1024');
 
   loaded = JSONX.loadf('./tests/files/test_4.jsonx') as JSONX;
   console.log(loaded.stringify());
-  console.log(loaded.get("val"));
+  console.log((loaded.get("val") as BlobInstance).getString());
+  console.log((loaded.get("val2") as BlobInstance).getString());
+  assert(Math.abs(+interpret<BlobInstance>(loaded.get('val'))
+                       .getString() -
+                  Math.acos(1.0)) < 0.01);
+  assert(Math.abs(+interpret<BlobInstance>(loaded.get('val'))
+                       .getString() -
+                  Math.acos(Math.acos(1.0))) < 0.01);
 
   console.log(
       `Blob usage: ${BlobManager.percentUsed.toPrecision(2)}%`);

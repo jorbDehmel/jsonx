@@ -2,4 +2,6 @@
 {
   _: env.include(env.math) // Newline counts as comma
   val: acos(1),,,,, // Commas are ignored
+  nested_acos: x => acos(acos(x)); // Semicolons too
+  val2: nested_acos(1)
 }

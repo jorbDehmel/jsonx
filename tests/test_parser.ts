@@ -4,14 +4,13 @@
  * @brief Tests the JSONX parser
  */
 
-import {tokenize} from "../src/lexer";
-import {parseJSONX} from "../src/parser";
+import {JSONX} from "../src/jsonx";
 
 /// Parses, then prints. Implicitly tests that the string
 /// parses.
 function parseAndPrint(text: string) {
   console.log(`Parsing raw text '${text}'`);
-  let s = parseJSONX(tokenize(text));
+  let s = JSONX.loads(text);
   console.log('Parsed:');
   console.log(s);
   console.log();
@@ -24,7 +23,7 @@ function shouldNotParse(text: string) {
               'expectation of failure');
 
   try {
-    let s = parseJSONX(tokenize(text));
+    let s = JSONX.loads(text);
   } catch {
     return;
   }

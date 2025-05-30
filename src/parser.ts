@@ -31,19 +31,24 @@ function isInteger(data: string): boolean {
 
 /// A lambda body which can be evaluated
 class JSONXLambdaBody {
-  args: String;
+  argName: String;
   body: JSONXVarType|((thisJSONX: JSONXVarType,
                        arg: JSONXVarType) => JSONXVarType);
+  immediate: boolean;
 
-  constructor(args: String, body: JSONXVarType|
-              ((thisJSONX: JSONXVarType,
-                arg: JSONXVarType) => JSONXVarType)) {
-    this.args = args;
+  constructor(args: String,
+              body: JSONXVarType|
+              ((thisJSONX: JSONX|BlobInstance|JSONXLambdaBody,
+                arg: JSONX|BlobInstance|
+                JSONXLambdaBody) => JSONXVarType),
+              immediate: boolean = false) {
+    this.argName = args;
     this.body = body;
+    this.immediate = immediate;
   }
 
-  call(thisJSONX: JSONXVarType,
-       args: JSONXVarType): JSONXVarType {
+  callResolve(thisJSONX: JSONXVarType,
+              args: JSONXVarType): JSONXVarType {
     if (this.body instanceof Function) {
       // External call
       return this.body(thisJSONX, args);
@@ -52,10 +57,53 @@ class JSONXLambdaBody {
       throw new Error("Lambda replacement is unimplemented");
     }
   }
+
+  call(thisJSONX: JSONXVarType,
+       args: JSONXVarType): JSONXVarType {
+    if (this.immediate) {
+      return this.callResolve(thisJSONX, args);
+    } else {
+      return new JSONXUnresolvedLambdaSubstitution(thisJSONX,
+                                                   args, this);
+    }
+  }
+}
+
+/// Resolves to a value, but not until actually queried
+class JSONXUnresolvedLambdaSubstitution {
+  thisJSONX: JSONXVarType;
+  args: JSONXVarType;
+  toCall: JSONXLambdaBody;
+
+  constructor(thisJSONX: JSONXVarType, args: JSONXVarType,
+              toCall: JSONXLambdaBody) {
+    this.thisJSONX = thisJSONX;
+    this.args = args;
+    this.toCall = toCall;
+  }
+
+  resolve(): JSONXVarType {
+    // Ensure we are talking about a resolved object
+    while (this.thisJSONX instanceof
+           JSONXUnresolvedLambdaSubstitution) {
+      this.thisJSONX = this.thisJSONX.resolve();
+    }
+
+    // Ensure our argument is resolved
+    while (this.args instanceof
+           JSONXUnresolvedLambdaSubstitution) {
+      this.args = this.args.resolve();
+    }
+
+    const out =
+        this.toCall.callResolve(this.thisJSONX, this.args);
+    return out;
+  }
 }
 
 /// The type of a variable
-type JSONXVarType = JSONX|BlobInstance|JSONXLambdaBody;
+type JSONXVarType = JSONX|BlobInstance|JSONXLambdaBody|
+    JSONXUnresolvedLambdaSubstitution;
 
 /// Can represent a variable, scope, or whatever else.
 class JSONXVariableNode {
@@ -119,76 +167,83 @@ class JSONX {
   /// Attempt to find the given variable/index in this scope
   get(key: String|Number|(String|Number)[]): JSONXVarType
       |undefined {
-    if (Array.isArray(key)) {
-      if (key.length > 0) {
-        let child = this.get(key[0]);
-        if (key.length == 1) {
-          return child;
-        } else if (child instanceof JSONX) {
-          key.splice(0, 1);
-          return child.get(key);
+    function internalGet(whom) {
+      if (Array.isArray(key)) {
+        if (key.length > 0) {
+          let child = whom.get(key[0]);
+          if (key.length == 1) {
+            return child;
+          } else if (child instanceof JSONX) {
+            key.splice(0, 1);
+            return child.get(key);
+          }
+        }
+      } else if (isString(key)) {
+        // Variable name
+        if (key == "this") {
+          return whom;
+        } else if (key == "parent") {
+          return whom.__parent;
+        } else if (key == "env") {
+          return JSONX.env;
+        } else if (key == "global") {
+          let cur = whom;
+          while (cur.__parent != undefined) {
+            cur = cur.__parent;
+          }
+          return cur;
+        }
+
+        let out: JSONXVariableNode[] = [];
+        for (const variable of whom.variables) {
+          if (variable.name != undefined &&
+              variable.name == key) {
+            out.push(variable);
+          }
+        }
+
+        if (out.length == 0) {
+          return undefined;
+        }
+
+        // Return the one with the highest weight
+        out.sort(
+            (a: JSONXVariableNode, b: JSONXVariableNode) => {
+              return b.weight - a.weight;
+            })
+
+        if (out.length > 1 && out[0].weight == out[1].weight) {
+          throw new Error(`Multiple values for '${
+              out[0].name}' have weight '${out[0].weight}'`);
+        }
+
+        if (!Array.isArray(out[0].value)) {
+          return out[0].value;
+        } else {
+          return whom.get(out[0].value);
+        }
+      } else if (isNumber(key) &&
+                 key as number < whom.variables.length) {
+        // Index
+        // NOTE: Indexed items cannot use weights!
+        const toReturn = whom.variables[key as number].value;
+        if (!Array.isArray(toReturn)) {
+          return toReturn;
+        } else {
+          return whom.get(toReturn);
         }
       }
-    } else if (isString(key)) {
-      // Variable name
-      if (key == "this") {
-        return this;
-      } else if (key == "parent") {
-        return this.__parent;
-      } else if (key == "env") {
-        return JSONX.env;
-      } else if (key == "global") {
-        if (this.__parent == undefined) {
-          return this;
-        }
-        let cur = this.__parent;
-        while (cur.__parent != undefined) {
-          cur = cur.__parent;
-        }
-        return cur;
-      }
 
-      let out: JSONXVariableNode[] = [];
-      for (const variable of this.variables) {
-        if (variable.name != undefined &&
-            variable.name == key) {
-          out.push(variable);
-        }
-      }
-
-      if (out.length == 0) {
-        return undefined;
-      }
-
-      // Return the one with the highest weight
-      out.sort((a: JSONXVariableNode, b: JSONXVariableNode) => {
-        return b.weight - a.weight;
-      })
-
-      if (out.length > 1 && out[0].weight == out[1].weight) {
-        throw new Error(`Multiple values for '${
-            out[0].name}' have weight '${out[0].weight}'`);
-      }
-
-      if (!Array.isArray(out[0].value)) {
-        return out[0].value;
-      } else {
-        return this.get(out[0].value);
-      }
-    } else if (isNumber(key) &&
-               key as number < this.variables.length) {
-      // Index
-      // NOTE: Indexed items cannot use weights!
-      const toReturn = this.variables[key as number].value;
-      if (!Array.isArray(toReturn)) {
-        return toReturn;
-      } else {
-        return this.get(toReturn);
-      }
+      // Invalid index
+      return undefined;
     }
 
-    // Invalid index
-    return undefined;
+    // Fully resolve lambda calls
+    let out = internalGet(this);
+    if (out instanceof JSONXUnresolvedLambdaSubstitution) {
+      return out.resolve();
+    }
+    return out;
   }
 
   get length(): number {
@@ -212,7 +267,7 @@ class JSONX {
       } else if (value instanceof BlobInstance) {
         return value.getString();
       } else if (value instanceof JSONXLambdaBody) {
-        let out = value.args + " => ";
+        let out = value.argName + " => ";
         if (value.body instanceof Function) {
           out += "...";
         } else {
@@ -220,6 +275,15 @@ class JSONX {
                                 tab);
         }
         return out;
+      } else if (value instanceof
+                 JSONXUnresolvedLambdaSubstitution) {
+        out += stringifyValue(value.toCall, tabbing, tab);
+        out += "(";
+        out += out +=
+            stringifyValue(value.args, tabbing + tab, tab);
+      } else {
+        console.log(
+            '/* Unexpected variable type:', typeof value, '*/');
       }
     }
 
@@ -549,7 +613,8 @@ function parseExpression(pos: Pos, context?: JSONX):
         args = context.get(args);
       }
 
-      // Do the call
+      // Yield an object which, when resolved, will be the
+      // result of the call
       obj = obj.call(context, args);
       didThing = true;
     } else if (pos.peek().type == "MATH") {
@@ -613,9 +678,10 @@ JSONX.env.insert(
       } else if (arg instanceof BlobInstance) {
         // Filepath to open, then localize
         return (JSONX.env.get("include") as JSONXLambdaBody)
-            .call(context,
-                  (JSONX.env.get("loadf") as JSONXLambdaBody)
-                      .call(context, arg));
+            .callResolve(
+                context,
+                (JSONX.env.get("loadf") as JSONXLambdaBody)
+                    .callResolve(context, arg));
       } else {
         // JSONX to localize
         for (let i = 0; i < arg.length; ++i) {
@@ -627,7 +693,7 @@ JSONX.env.insert(
         toReturn.set(BlobManager.encoder.encode('true'));
         return toReturn;
       }
-    }));
+    }, true));
 
 ["E", "LN10", "LN2", "LOG2E", "LOG10E", "PI", "SQRT1_2",
  "SQRT2", "abs", "acos", "asin", "atan", "ceil", "cos", "exp",
