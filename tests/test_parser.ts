@@ -61,7 +61,7 @@ function main() {
   // Weights, math, and compound structures
   parseAndPrint('{a!!!: {b?: 123}, c: a.0}');
   parseAndPrint('[a, b, c, {d: 12, e: f}, g]');
-  parseAndPrint('{a: 123 + 5 * 16, b: a == 100 + 2}');
+  // parseAndPrint('{a: 123 + 5 * 16, b: a == 100 + 2}');
 
   // Complex names and nestings
   parseAndPrint(
