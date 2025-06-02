@@ -6,19 +6,9 @@
 /// A lent-out copy-on-write pointer to shared
 /// memory
 class BlobInstance {
-  /// Creates a new pointer to the same data
-  duplicate(): BlobInstance {
-    return BlobManager.instance.duplicate(this);
-  }
-
   /// Free this allocation
   free() {
     BlobManager.instance.free(this);
-  }
-
-  /// True iff we own data
-  has(): boolean {
-    return BlobManager.instance.has(this);
   }
 
   /// Get the allocation data
@@ -32,7 +22,7 @@ class BlobInstance {
     if (out == undefined) {
       return undefined;
     }
-    return BlobManager.decoder.decode(this.get());
+    return BlobManager.decoder.decode(out);
   }
 
   /// Set the allocation data
@@ -47,10 +37,10 @@ class BlobManager {
   /// Singleton instance
   static instance = new BlobManager();
 
-  ///
+  /// Used for encoding text
   static encoder = new TextEncoder();
 
-  ///
+  /// Used for decoding text
   static decoder = new TextDecoder();
 
   /// Maps allocation IDs to allocations
@@ -75,37 +65,9 @@ class BlobManager {
   /// The max number of bytes
   static maxBytes?: number = 1024 * 64;
 
-  static get percentUsed(): number {
-    if (BlobManager.maxBytes == undefined) {
-      return 0.0;
-    } else if (BlobManager.maxBytes == 0) {
-      return 100.0;
-    } else {
-      return 100.0 *
-             (BlobManager.bytesUsed / BlobManager.maxBytes);
-    }
-  }
-
-  /// True iff we own data
-  has(who: BlobInstance): boolean {
-    return this.pointers.has(who);
-  }
-
-  /// Create a copy
-  duplicate(who: BlobInstance): BlobInstance {
-    let out = new BlobInstance();
-    if (this.has(who)) {
-      // Duplicate pointer to same allocation
-      const allocationID = this.pointers.get(who);
-      this.pointers.set(out, allocationID);
-      this.allocationViewIDs.get(allocationID).add(out);
-    }
-    return out;
-  }
-
   /// Remove the allocation associated with `who`
   free(who: BlobInstance) {
-    if (!this.has(who)) {
+    if (!this.pointers.has(who)) {
       return;
     }
     const ID = this.pointers.get(who);
@@ -121,19 +83,9 @@ class BlobManager {
     }
   }
 
-  /// Remove everything
-  purge(): void {
-    this.allocationViewIDs.clear();
-    this.allocations.clear();
-    this.pointers.clear();
-    this.nextAllocationIDs = [];
-    BlobManager.bytesUsed = 0;
-    this.nextToAdd = 0;
-  }
-
   /// Get a read-only view of the data
   get(who: BlobInstance): Readonly<Uint8Array>|undefined {
-    if (this.has(who)) {
+    if (this.pointers.has(who)) {
       return this.allocations.get(this.pointers.get(who));
     }
     return undefined;
@@ -153,7 +105,7 @@ class BlobManager {
 
     // Create new allocation
     if (this.nextAllocationIDs.length == 0) {
-      this.nextAllocationIDs.push(this.nextToAdd);
+      this.nextAllocationIDs.push(this.pointers.size);
       ++this.nextToAdd;
     }
     const ID = this.nextAllocationIDs.pop();

@@ -4,7 +4,7 @@
  * @brief Tests the JSONX parser
  */
 
-import {JSONX} from "../src/jsonx";
+import {JSONX} from "../src/parser";
 
 /// Parses, then prints. Implicitly tests that the string
 /// parses.

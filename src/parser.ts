@@ -9,7 +9,7 @@
 import {readFileSync} from "fs";
 
 import {BlobInstance, BlobManager} from "./blob_manager";
-import {ParseError, Pos, Token, tokenize} from "./lexer";
+import {Pos, Token, tokenize} from "./lexer";
 
 /// "statically typed language" my foot
 function isString(data: unknown): data is string {
@@ -18,7 +18,6 @@ function isString(data: unknown): data is string {
 function isNumber(data: unknown): data is number {
   return typeof data === 'number';
 }
-
 function isInteger(data: string): boolean {
   const intOrNaN = +data;
   if (isNaN(intOrNaN)) {
@@ -131,55 +130,20 @@ class JSONX {
   }
 
   /// Append a new child to the tree
-  insert(key?: String|(String[]),
-         value?: JSONXVarType|(Number|String)[],
+  insert(key?: String, value?: JSONXVarType|(Number|String)[],
          weight?: number): JSONXVariableNode {
-    if (Array.isArray(key)) {
-      if (key.length < 1) {
-        throw new ParseError(
-            'Cannot add variable with empty compound path!');
-      } else if (key.length == 1) {
-        return this.insert(key[0], value, weight);
-      } else {
-        let localName = key[0];
-        key.splice(0, 1);
-        let newScope: JSONX;
-        let found = this.get(localName);
-        if (found instanceof JSONX) {
-          newScope = found;
-        } else {
-          newScope =
-              this.insert(localName, new JSONX(this)).value as
-              JSONX;
-        }
-        return newScope.insert(key, value, weight);
-      }
-    } else {
-      if (value instanceof JSONX) {
-        value.__parent = this;
-      }
-      this.variables.push(
-          {name : key, value : value, weight : weight});
-      return this.variables[this.variables.length - 1];
+    if (value instanceof JSONX) {
+      value.__parent = this;
     }
+    this.variables.push(
+        {name : key, value : value, weight : weight});
+    return this.variables[this.variables.length - 1];
   }
 
   /// Attempt to find the given variable/index in this scope
-  get(key: String|Number|(String|Number)[]): JSONXVarType
-      |undefined {
-    function internalGet(whom) {
-      if (Array.isArray(key)) {
-        if (key.length > 0) {
-          let child = whom.get(key[0]);
-          if (key.length == 1) {
-            return child;
-          } else if (child instanceof JSONX) {
-            key.splice(0, 1);
-            return child.get(key);
-          }
-        }
-      } else if (isString(key)) {
-        // Variable name
+  get(key: String|Number): JSONXVarType|undefined {
+    function internalGet(whom: JSONX) {
+      if (isString(key)) {
         if (key == "this") {
           return whom;
         } else if (key == "parent") {
@@ -192,35 +156,38 @@ class JSONX {
             cur = cur.__parent;
           }
           return cur;
-        }
-
-        let out: JSONXVariableNode[] = [];
-        for (const variable of whom.variables) {
-          if (variable.name != undefined &&
-              variable.name == key) {
-            out.push(variable);
-          }
-        }
-
-        if (out.length == 0) {
-          return undefined;
-        }
-
-        // Return the one with the highest weight
-        out.sort(
-            (a: JSONXVariableNode, b: JSONXVariableNode) => {
-              return b.weight - a.weight;
-            })
-
-        if (out.length > 1 && out[0].weight == out[1].weight) {
-          throw new Error(`Multiple values for '${
-              out[0].name}' have weight '${out[0].weight}'`);
-        }
-
-        if (!Array.isArray(out[0].value)) {
-          return out[0].value;
         } else {
-          return whom.get(out[0].value);
+          let out: JSONXVariableNode[] = [];
+          for (const variable of whom.variables) {
+            if (variable.name != undefined &&
+                variable.name == key) {
+              out.push(variable);
+            }
+          }
+          if (out.length == 0) {
+            return undefined;
+          }
+
+          // Return the one with the highest weight
+          out.sort((a, b) => b.weight - a.weight);
+          if (out.length > 1 &&
+              out[0].weight == out[1].weight) {
+            throw new Error(`Multiple values for '${
+                out[0].name}' have weight '${out[0].weight}'`);
+          }
+
+          if (!Array.isArray(out[0].value)) {
+            return out[0].value;
+          } else {
+            let cur: JSONXVarType|undefined = whom;
+            for (const tok of out[0].value) {
+              if (!(cur instanceof JSONX)) {
+                return undefined;
+              }
+              cur = cur.get(tok);
+            }
+            return cur;
+          }
         }
       } else if (isNumber(key) &&
                  key as number < whom.variables.length) {
@@ -230,7 +197,14 @@ class JSONX {
         if (!Array.isArray(toReturn)) {
           return toReturn;
         } else {
-          return whom.get(toReturn);
+          let cur: JSONXVarType|undefined = whom;
+          for (const tok of toReturn) {
+            if (!(cur instanceof JSONX)) {
+              return undefined;
+            }
+            cur = cur.get(tok);
+          }
+          return cur;
         }
       }
 
@@ -348,8 +322,8 @@ class JSONX {
    * @returns The JS object represented by the JSONX text
    */
   static loads(text: string, maxMs: number = 60_000,
-               maxBytesDA: number = 128_000, context?: JSONX,
-               filepath?: string): JSONXVarType|undefined {
+               maxBytesDA: number = 128_000, filepath?: string):
+      JSONXVarType|(String|Number)[]|undefined {
     // Set max bytes
     BlobManager.maxBytes = maxBytesDA;
 
@@ -368,7 +342,7 @@ class JSONX {
     const tokens = tokenize(text, filepath);
 
     // Parse
-    const parsed = parseJSONX(tokens, context);
+    const parsed = parseJSONX(tokens);
 
     // If we have a timer running, cancel it
     if (maxMs != undefined) {
@@ -386,12 +360,11 @@ class JSONX {
    * @returns The JS object represented by the JSONX text
    */
   static loadf(filepath: string, maxMs: number = 60_000,
-               maxBytesDA: number = 128_000,
-               context?: JSONX): JSONXVarType|undefined {
+               maxBytesDA: number = 128_000): JSONXVarType|
+      (String|Number)[]|undefined {
     // Load file contents
     const text = readFileSync(filepath).toString();
-    return JSONX.loads(text, maxMs, maxBytesDA, context,
-                       filepath);
+    return JSONX.loads(text, maxMs, maxBytesDA, filepath);
   }
 }
 
@@ -401,51 +374,44 @@ function parseScope(pos: Pos, context?: JSONX): JSONX {
   let out: JSONX = new JSONX(context);
   pos.expect('{');
   while (pos.peek().text != '}') {
-    // Identifier (possibly compound, e.g. a.b.c, but never
-    // indicized)
-    let identifier = parseIdentifierLHS(pos);
-    let weight = parseWeight(pos);
+    let identifier = pos.next().text;
 
-    // Colon
+    if (pos.peek().text == ".") {
+      throw new Error(
+          "LHS identifiers must contain exactly one token");
+    } else if (isInteger(identifier)) {
+      throw new Error("LHS identifiers must not be indices");
+    } else {
+      if (identifier.startsWith('"') ||
+          identifier.startsWith('\'') ||
+          identifier.startsWith('`')) {
+        identifier =
+            identifier.substring(1, identifier.length - 1);
+      }
+    }
+    const weight = parseWeight(pos);
     pos.expect(':');
-
-    // RHS
-    let rhs = parseExpression(pos, out);
-
-    // Add to scope
+    const rhs = parseExpression(pos, out);
     out.insert(identifier, rhs, weight);
-
-    // Optional comma
     while (pos.peek().text == ',') {
       pos.next();
     }
   }
   pos.expect('}');
-
-  // Now pointing to first token after
   return out;
 }
 
 function parseArray(pos: Pos, context?: JSONX): JSONX {
   let out = new JSONX(context);
   pos.expect('[');
-
   while (pos.peek().text != ']') {
-    // RHS
     let rhs = parseExpression(pos, out);
-
-    // Add to scope
     out.insert(undefined, rhs);
-
-    // Optional comma
     while (pos.peek().text == ',') {
       pos.next();
     }
   }
-
   pos.expect(']');
-
-  // Now pointing to first token after
   return out;
 }
 
@@ -453,8 +419,6 @@ function parseArray(pos: Pos, context?: JSONX): JSONX {
 /// ["a", "b", 0, "d", "e"]
 function parseIdentifierRHS(pos: Pos): (String|Number)[] {
   let out: (String|Number)[] = [];
-
-  // One name is required
   const tok = pos.next();
   if (tok.type == "ID") {
     out.push(tok.text as String);
@@ -462,12 +426,8 @@ function parseIdentifierRHS(pos: Pos): (String|Number)[] {
     throw new Error(
         `'${tok.text}' is not a valid RHS first identifier.`);
   }
-
-  // But any number more can follow that, with slightly looser
-  // restrictions (indices and strings)
   while (pos.peek().text == ".") {
     pos.next();
-
     const tok = pos.next();
     if (tok.type == "ID") {
       if (isInteger(tok.text)) {
@@ -485,93 +445,47 @@ function parseIdentifierRHS(pos: Pos): (String|Number)[] {
           `'${tok.text}' is not a valid identifier.`);
     }
   }
-
   return out;
 }
 
-/// The same as `parseIdentifier`, but only allows LHS-viable
-/// paths (no indices)
-function parseIdentifierLHS(pos: Pos): String {
-  let tok = pos.next();
-  if (pos.peek().text == ".") {
-    throw new Error(
-        "LHS identifiers must contain exactly one token");
-  } else if (isInteger(tok.text)) {
-    throw new Error("LHS identifiers must not be indices");
-  } else {
-    if (tok.text.startsWith('"') || tok.text.startsWith('\'') ||
-        tok.text.startsWith('`')) {
-      return tok.text.substring(1, tok.text.length - 1) as
-             String;
-    } else {
-      return tok.text as String;
-    }
-  }
-}
-
+/// The weight on a particular element of an object
 function parseWeight(pos: Pos): number {
   let out = 0;
   if (pos.peek().text == '?') {
     while (pos.peek().text == '?') {
       --out;
       pos.next();
-      if (pos.peek().text == '!') {
-        throw new ParseError('Cannot have both \'?\' and \'!\'',
-                             pos.peek());
-      }
     }
   } else if (pos.peek().text == '!') {
     while (pos.peek().text == '!') {
       ++out;
       pos.next();
-      if (pos.peek().text == '?') {
-        throw new ParseError('Cannot have both \'?\' and \'!\'',
-                             pos.peek());
-      }
     }
   }
-
-  // Now pointing to first token after weighting
   return out;
 }
 
-/*
-The RHS of a statement
-
-Easy + suffix options
-- A lambda / arrow function
-- A function call on some expressions
-
-Hard:
-- Math
-*/
+/// The RHS of a statement
 function parseExpression(pos: Pos, context?: JSONX):
     JSONXVarType|(Number | String)[] {
   const tok = pos.peek();
   let obj: JSONXVarType|undefined|(Number | String)[] =
       undefined;
   if (tok.text == '[') {
-    // Array
     obj = parseArray(pos, context);
   } else if (tok.text == '{') {
-    // Scope
     obj = parseScope(pos, context);
-  }
-
-  else if (tok.type == "ID" && !isInteger(tok.text)) {
-    // Identifier CHAIN referring to an existing value
+  } else if (tok.type == "ID" && !isInteger(tok.text)) {
     obj = parseIdentifierRHS(pos);
   } else if (tok.type == "LIT" || tok.type == "ID") {
-    // Single-token literal (string, bool, or non-index ID)
     obj = new BlobInstance();
     obj.set(BlobManager.encoder.encode(tok.text));
-
-    // Advance to first tok after literal
     pos.next();
   } else {
     throw new Error(`Failed to parse token '${tok.text}'`);
   }
 
+  // Resolve suffix expressions (e.g. lambdas)
   let didThing = true;
   while (didThing) {
     didThing = false;
@@ -579,7 +493,6 @@ function parseExpression(pos: Pos, context?: JSONX):
     if (next.type == "EOF") {
       break;
     } else if (next.text == "=>") {
-      // Lambda def
       if (!Array.isArray(obj) || obj.length != 1 ||
           !isString(obj[0])) {
         throw new Error(
@@ -588,7 +501,14 @@ function parseExpression(pos: Pos, context?: JSONX):
       pos.next();
       let body = parseExpression(pos, context);
       if (Array.isArray(body)) {
-        body = context.get(body);
+        let cur: JSONXVarType|undefined = context;
+        for (const tok of body) {
+          if (!(cur instanceof JSONX)) {
+            return undefined;
+          }
+          cur = cur.get(tok);
+        }
+        body = cur;
       }
       let lambda = new JSONXLambdaBody(obj[0], body);
       obj = lambda;
@@ -596,7 +516,14 @@ function parseExpression(pos: Pos, context?: JSONX):
     } else if (next.text == "(") {
       // Lambda reduction
       if (Array.isArray(obj)) {
-        obj = context.get(obj);
+        let cur: JSONXVarType|undefined = context;
+        for (const tok of obj) {
+          if (!(cur instanceof JSONX)) {
+            return undefined;
+          }
+          cur = cur.get(tok);
+        }
+        obj = cur;
       }
 
       // Ensure we are talking about a lambda
@@ -610,7 +537,14 @@ function parseExpression(pos: Pos, context?: JSONX):
       pos.expect(")");
 
       if (Array.isArray(args)) {
-        args = context.get(args);
+        let cur: JSONXVarType|undefined = context;
+        for (const tok of args) {
+          if (!(cur instanceof JSONX)) {
+            return undefined;
+          }
+          cur = cur.get(tok);
+        }
+        args = cur;
       }
 
       // Yield an object which, when resolved, will be the
@@ -618,41 +552,39 @@ function parseExpression(pos: Pos, context?: JSONX):
       obj = obj.call(context, args);
       didThing = true;
     } else if (pos.peek().type == "MATH") {
-      // Binary math operations
       throw new Error("Math is unimplemented");
-      didThing = true;
     }
   }
-
   return obj;
 }
 
 ////////////////////////////////////////////////////////////////
 
 /// Parse from token stream
-function parseJSONX(lexed: Token[],
-                    context?: JSONX): JSONXVarType|undefined {
+function parseJSONX(lexed: Token[]): JSONXVarType|
+    (String | Number)[]|undefined {
   if (lexed.length < 2) {
     return undefined;
   }
 
   let pos = new Pos(lexed);
-  let toReturn = parseExpression(pos, context);
+  let toReturn = parseExpression(pos);
   pos.expect('EOF');
 
-  if (Array.isArray(toReturn)) {
-    return context?.get(toReturn);
-  }
   return toReturn;
 }
 
 /// Load a file as a scope
 JSONX.env.insert(
-    'loadf', new JSONXLambdaBody('path', (context, arg) => {
+    'loadf', new JSONXLambdaBody('path', (_, arg) => {
       const pathStr = (arg as BlobInstance).getString()!;
-      return JSONX.loadf(
-          pathStr.substring(1, pathStr.length - 1), undefined,
-          undefined, context as JSONX);
+      const out =
+          JSONX.loadf(pathStr.substring(1, pathStr.length - 1));
+      if (!Array.isArray(out)) {
+        return out;
+      } else {
+        return undefined;
+      }
     }));
 
 /// Load a file as a raw blob
@@ -695,6 +627,7 @@ JSONX.env.insert(
       }
     }, true));
 
+let math = JSONX.env.insert("math", new JSONX()).value as JSONX;
 ["E", "LN10", "LN2", "LOG2E", "LOG10E", "PI", "SQRT1_2",
  "SQRT2", "abs", "acos", "asin", "atan", "ceil", "cos", "exp",
  "floor", "log", "max", "min", "pow", "round", "sin", "sqrt",
@@ -705,11 +638,11 @@ JSONX.env.insert(
         let toAdd = new BlobInstance();
         toAdd.set(
             BlobManager.encoder.encode(Math[value].toString()));
-        JSONX.env.insert([ "math", value ], toAdd);
+        math.insert(value, toAdd);
       } else if (value == "max" || value == "min") {
         // Array-input functions
-        JSONX.env.insert(
-            [ "math", value ],
+        math.insert(
+            value,
             new JSONXLambdaBody('arg', (context, arg) => {
               let input: number[] = [];
               for (let i = 0; i < (arg as JSONX).length; ++i) {
@@ -726,8 +659,8 @@ JSONX.env.insert(
       } else if (value == "pow") {
         // Two-argument function
         // env.math.pow({base: 123, exp: 123})
-        JSONX.env.insert(
-            [ "math", value ],
+        math.insert(
+            value,
             new JSONXLambdaBody('arg', (context, arg) => {
               const base = Number.parseInt(
                   ((arg as JSONX).get("base") as BlobInstance)
@@ -743,18 +676,21 @@ JSONX.env.insert(
             }));
       } else {
         // Single-argument functions
-        JSONX.env.insert(
-            [ "math", value ],
-            new JSONXLambdaBody('arg', (context, arg) => {
-              const x = Number.parseInt(
-                  (arg as BlobInstance).getString());
-              let out = new BlobInstance();
-              out.set(BlobManager.encoder.encode(
-                  ((Math[value] as any)(x) as Number)
-                      .toString()));
-              return out;
-            }));
+        math.insert(value, new JSONXLambdaBody('arg', (context,
+                                                       arg) => {
+                      const x = Number.parseInt(
+                          (arg as BlobInstance).getString());
+                      let out = new BlobInstance();
+                      out.set(BlobManager.encoder.encode(
+                          ((Math[value] as any)(x) as Number)
+                              .toString()));
+                      return out;
+                    }));
       }
     });
 
-export {JSONXVarType, JSONX};
+export {
+  BlobInstance,
+  BlobManager,
+  JSONX,
+};
