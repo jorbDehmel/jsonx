@@ -169,54 +169,49 @@ class Pos {
     this.pos = pos;
   }
 
-  /// Consume and return the next token Returns EOF if we are
-  /// already at the end.
-  next(): Token {
-    let tok = this.peek();
-    ++this.pos;
-    return tok;
+  tell(): number {
+    return this.pos;
   }
 
-  /// Get the next token, throwing an error if it doesn't match.
-  /// This is CONSUMPTIVE.
-  expect(text?: string, type?: string) {
-    let n = this.next();
-    if (text != undefined && n.text != text) {
-      throw new ParseError(
-          `Expected token text '${text}', but saw '${n.text}'`,
-          n);
+  child(first: number, first_after: number): Pos {
+    let l: Token[] = [];
+    for (let i = first;
+         0 <= i && i < this.tokens.length && i < first_after;
+         ++i) {
+      l.push(this.tokens[i]);
     }
-    if (type != undefined && n.text != text) {
-      throw new ParseError(
-          `Expected token type '${type}', but saw '${n.type}'`,
-          n);
-    }
+    return new Pos(l, 0);
   }
 
-  /// Expect that the peek-ed token matches
-  peekExpect(text?: string, type?: string) {
-    let n = this.peek();
-    if (text != undefined && n.text != text) {
-      throw new ParseError(
-          `Expected token text '${text}', but saw '${n.text}'`,
-          n);
-    }
-    if (type != undefined && n.text != text) {
-      throw new ParseError(
-          `Expected token type '${type}', but saw '${n.type}'`,
-          n);
-    }
+  /// Advance n tokens, default 1
+  next(n: number = 1): void {
+    this.pos += n;
   }
 
-  /// Look at the next token non-comsumptively. Returns <EOF> if
-  /// we are already at the end.
-  peek() {
-    if (this.pos >= this.tokens.length) {
+  /// Tell the current token
+  cur(): Token {
+    if (this.done()) {
       // Out of range!
       return new Token("EOF", "EOF");
     } else {
       // Not out of range.
-      let tok = this.tokens[this.pos];
+      return this.tokens[this.pos];
+    }
+  }
+
+  /// Returns whether we can call cur without EOF
+  done(): boolean {
+    return this.pos >= this.tokens.length;
+  }
+
+  /// Looks n tokens into the future. 0 would be cur()
+  peek(n: number = 1): Token {
+    if (this.pos + n >= this.tokens.length) {
+      // Out of range!
+      return new Token("EOF", "EOF");
+    } else {
+      // Not out of range.
+      let tok = this.tokens[this.pos + n];
       return tok;
     }
   }

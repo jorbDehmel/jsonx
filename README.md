@@ -67,6 +67,94 @@ console.log(obj.get("out"));
 */
 ```
 
+## How a Query Works
+
+Suppose we have the document
+
+```json
+obj: {
+    foo: "Hi",
+    fizz: [
+        this,
+        parent.foo,
+        this.fizz
+    ],
+    fn: x => this.foo,
+}
+```
+
+Once loaded, the object looks like this:
+
+```json
+/* Unresolved */
+```
+
+If we queries `obj.fizz.1`, the following intermediate steps
+would be taken:
+
+```json
+// Step 1: We want obj, so resolve that
+obj: {
+    foo: /* Unresolved */,
+    fizz: /* Unresolved */,
+    fn: /* Unresolved */,
+}
+
+// Step 2: We want obj.fizz, so resolve that
+obj: {
+    foo: /* Unresolved */,
+    fizz: [
+        /* Unresolved */,
+        /* Unresolved */,
+        /* Unresolved */
+    ],
+    fn: /* Unresolved */,
+}
+
+// Step 3: We want obj.fizz.1, so resolve that
+obj: {
+    foo: /* Unresolved */,
+    fizz: [
+        /* Unresolved */,
+        parent.foo,
+        /* Unresolved */
+    ],
+    fn: /* Unresolved */,
+}
+
+// Our new objective: obj.fizz.1.parent.foo
+// This reduces to obj.foo
+
+// Step 4: We want obj, so resolve that (no work needed!)
+obj: {
+    foo: /* Unresolved */,
+    fizz: [
+        /* Unresolved */,
+        parent.foo,
+        /* Unresolved */
+    ],
+    fn: /* Unresolved */,
+}
+
+// Step 5: We want obj.foo, so resolve that
+obj: {
+    foo: "Hi",
+    fizz: [
+        /* Unresolved */,
+        parent.foo,
+        /* Unresolved */
+    ],
+    fn: /* Unresolved */,
+}
+
+// Our new objective: "Hi"
+// Since obj."Hi" doesn't exist, the answer is the string "Hi"
+```
+
+The process of "resolving" a JSONX block amounts to finding all
+entries held directly within it. Once a block is resolved, later
+queries do not have to resolve it.
+
 ## License
 
 Warren MacEvoy, 2025, MIT License

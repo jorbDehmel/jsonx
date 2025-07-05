@@ -1,0 +1,4 @@
+{
+  manual_path: "refman.pdf"
+  manual: rawf(manual_path)
+}

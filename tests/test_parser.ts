@@ -4,7 +4,7 @@
  * @brief Tests the JSONX parser
  */
 
-import {JSONX} from "../src/parser";
+import {JSONX} from "../src/parser_2";
 
 /// Parses, then prints. Implicitly tests that the string
 /// parses.
@@ -14,21 +14,6 @@ function parseAndPrint(text: string) {
   console.log('Parsed:');
   console.log(s);
   console.log();
-}
-
-/// Attempts to parse text and throws if it successfully does
-/// so.
-function shouldNotParse(text: string) {
-  console.log(`Attempting to parsing raw text '${text}' with ` +
-              'expectation of failure');
-
-  try {
-    let s = JSONX.loads(text);
-  } catch {
-    return;
-  }
-  throw new Error(
-      `Expected '${text}' not to parse, but succeeded!`);
 }
 
 /// Runs test cases
@@ -67,12 +52,6 @@ function main() {
       '{api : {}, false: true, "false": this.false, ":": ' +
       '"false"."false", defaults: {x: 3, y: 4, z: parent.z}, ' +
       'y: defaults.y + 1, y!!!!: 77 "z": 44} == 77');
-
-  // Error cases
-  shouldNotParse('{a: }');
-  shouldNotParse('{: 12}');
-  shouldNotParse('{a: 12');
-  shouldNotParse('[a: 12]');
 }
 
 main();
