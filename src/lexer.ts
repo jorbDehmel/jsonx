@@ -134,7 +134,6 @@ function tokenize(src: string, filepath?: string): Token[] {
                             col - tk.length));
     }
   }
-  tokens.push(new Token('EOF', 'EOF', filepath, line, col));
   return tokens;
 }
 
