@@ -1,8 +1,23 @@
 
-# `jsx`
+# `JSONX / jsx`
+
+("Jay-sonks" or "JSON-ex")
 
 A constraint/query data language based on JSON (of which it is a
-superset).
+superset). This implementation is for typescript. JSONX is a
+hierarchical data language (but is notably Turing complete). It
+allows lambda functions, external interfacing, and code re-use
+in a JSON-like form factor.
+
+JSONX Syntax highlighting for VSCode can be found
+[here](https://github.com/jorbDehmel/jsonx-highlighting).
+
+## Containerization and Testing
+
+To enter a `Docker` container, run `make docker`. For `podman`,
+run `make podman`. Either inside of these containers or on a
+suitable Linux environment, run `make test` to run the test
+suite.
 
 ## Language
 
@@ -66,6 +81,87 @@ console.log(obj.get("out"));
     - Return "atan" called on "1"
 */
 ```
+
+## Types
+
+There are only three types in JSONX: Objects, blobs/strings, and
+lambdas. Objects have members, blobs are copy-on-write literals,
+and lambdas are callable objects (either internal or external).
+
+Although the `[ ... ]` ("array") syntax may seem different from
+the `{ ... }` ("object") syntax, they are actually the same.
+Indeed, both `{ 1, 2, 3 }` and `[ a: 1, b: 2, c: 3 ]` are
+perfectly legal. In the former case, the numbers are simply
+added without any names, accessible only by their indices.
+Indices work on arrays or non-arrays.
+
+```js
+{
+    a: { 4, 5, 6 },
+    b: [ a: 1, b: 2, c: 3 ],
+    c: a.0, // Resolves to "4"
+    d: b.2, // Resolves to "3"
+}
+```
+
+Similarly, although `"false"` and `false` may seem different,
+they are actually the same thing; A string literal with the
+value "false". This extends to numbers: `123.456` actually
+becomes a string literal with the value "123.456". Even keywords
+are really just string literals with special interpretations.
+
+## Lambdas
+
+JSONX has functions in the form of lambdas similar to JS's arrow
+functions.
+
+```js
+foo: argument => body,
+```
+
+The lambda calculus statement $\lambda x . M$ translates to the
+JSONX `x => M`. Like lambda calculus, all JSONX lambdas can have
+only one argument. If you want to have several, you have several
+options: Either [Curry](https://en.wikipedia.org/wiki/Currying)
+your functions or assume that your argument has some named
+members (the prefered option).
+
+Currying:
+
+```js
+// A fn that applies it first argument twice on its second
+applyTwiceOn: f => x => f(f(x)),
+
+// To call:
+value: applyTwiceOn(env.math.tan)(100.0),
+```
+
+Querying:
+
+```js
+// A fn that applies it first argument twice on its second
+applyTwiceOn: args => args.f(args.f(args.x)),
+
+// To call:
+value: applyTwiceOn({f: env.math.tan, x: 100.0}),
+```
+
+## Keywords
+
+There are a few keywords for referencing different regions of
+the hierarchy.
+
+`this` refers to the current object.
+
+`parent` refers to the parent of the current object. If none
+exists, the behaviour is undefined.
+
+`global` refers to the object which has no parent.
+
+`env` is a special static object which is accessible by both
+JSONX programs and the instantiating JS/TS program. This is how
+JSONX programs are able to access external functions and values:
+For instance, `env.math` is a JSONX port of JS's `Math` object.
 
 ## How a Query Works
 
@@ -156,6 +252,69 @@ obj: {
 The process of "resolving" a JSONX block amounts to finding all
 entries held directly within it. Once a block is resolved, later
 queries do not have to resolve it.
+
+## EBNF
+
+JSONX is *not* parsed via EBNF: Here is a rough approximation
+anyways.
+
+```c
+JSONX:
+      "{" ENTRIES "}"
+    | "[" ENTRIES "]"
+    | name
+    | PATH
+    | OBJ "(" OBJ ")"
+    | OBJ "=>" OBJ
+    ;
+
+ENTRY:
+      name ":" JSONX
+    | name WEIGHTING ":" JSONX
+    | JSONX
+    ;
+
+WEIGHTING:
+      "?"
+    | "!"
+    | WEIGHTING WEIGHTING
+    ;
+
+ENTRIES:
+      ENTRY
+    | ENTRIES ","
+    | ENTRIES ";"
+    ;
+
+PATH:
+      name
+    | PATH "." name
+    ;
+```
+
+## Turing-Completeness and Space/Time Limitting
+
+Because JSONX is a superset of lambda calculus, it is
+Turing-complete. This makes it **unsuitable** for unregulated
+data transmission, but suitable for verified or local data. If
+you must process an unverified JSONX document, the parser has a
+few safeguards.
+
+```ts
+const a = JSONX.loadf('foo.jsx',
+    5_000,  // Max milliseconds to spend
+    128_000 // Max bytes of memory to spend
+);
+
+const b = JSONX.loads('...',
+    5_000,  // Same as above
+    128_000 // Same as above
+);
+```
+
+If the parsing process exceeds the given boundaries, an error
+will be thrown. If no boundaries are provided,
+**none are applied**.
 
 ## License
 

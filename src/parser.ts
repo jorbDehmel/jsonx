@@ -1,5 +1,5 @@
 /**
- * @brief
+ * @brief Defines the JSONX class, with static utilities
  */
 
 import {PathOrFileDescriptor, readFileSync} from "fs";
@@ -60,7 +60,7 @@ class JSONXLambdaBody {
     return out;
   }
 
-  ///
+  /// Dummy wrapper for typechecking: Always throws when called.
   get(name: string): JSONXVarType {
     throw new Error("Expected JSONX, but saw lambda body");
   }
@@ -89,7 +89,9 @@ export class JSONX {
   /// is where all external interfacing occurs
   static env = new JSONX();
 
-  /** */
+  /**
+   * @brief Load from a string
+   */
   static loads(text: string, maxMs: number = 5_000,
                maxBytesDA: number = 128_000,
                filepath?: PathOrFileDescriptor): JSONX {
@@ -127,7 +129,7 @@ export class JSONX {
     return parsed.get(0) as JSONX;
   }
 
-  ///
+  /// Load from some file descriptor
   static loadf(filepath: PathOrFileDescriptor,
                maxMs: number = 5_000,
                maxBytesDA: number = 128_000): JSONX {
@@ -136,7 +138,7 @@ export class JSONX {
     return JSONX.loads(text, maxMs, maxBytesDA, filepath);
   }
 
-  ///
+  /// Return a string representation of this object
   stringify(tabbing: string = ""): string {
     if (tabbing.length > 20) {
       return "OVERTABBED";
@@ -164,19 +166,19 @@ export class JSONX {
 
   //////////////////////////////////////////////////////////////
 
-  ///
+  /// If provided, the scope surrounding this one
   private parent?: JSONX;
 
   /// If not provided, same as TS's `this`
   private thisJSONX?: JSONX;
 
-  ///
+  /// The token stream this scope uses. Deleted after use
   private contents: Pos;
 
-  ///
+  /// Once resolved, contains the entries of this scope
   private members: Entry[] = [];
 
-  ///
+  /// True iff we have resolved all member LHS-es
   private isResolved: boolean = false;
 
   //////////////////////////////////////////////////////////////
@@ -222,7 +224,8 @@ export class JSONX {
     }
   }
 
-  ///
+  /// Parses (NOT recursively) and object so that it can later
+  /// be queried and resolved.
   private parseObject(): JSONXVarType {
     let value: JSONXVarType;
     if (this.contents.cur().text == "{") {
@@ -339,7 +342,7 @@ export class JSONX {
 
   //////////////////////////////////////////////////////////////
 
-  ///
+  /// Initialize from some token stream
   constructor(contents: Pos = new Pos([], 0), parent?: JSONX,
               thisJSONX?: JSONX) {
     this.parent = parent;
@@ -358,7 +361,7 @@ export class JSONX {
     return this.members;
   }
 
-  ///
+  /// If we have not resolved, do so. Otherwise, do nothing
   private ensureResolved() {
     if (!this.isResolved) {
       // Resolve
@@ -370,7 +373,7 @@ export class JSONX {
     }
   }
 
-  ///
+  /// Get the object with the given identifier (or undefined)
   get(name: string|number): JSONXVarType|undefined {
     name = name.toString();
 
@@ -447,7 +450,7 @@ JSONX.env.add(new JSONXLambdaBody('path', (_, arg) => {
                 return contents;
               }), 'rawf');
 
-///
+/// Format string utility
 JSONX.env.add(
     new JSONXLambdaBody('formatString', (thisJSONX, arg) => {
       let contents = arg as BlobInstance;
