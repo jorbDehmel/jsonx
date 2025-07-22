@@ -51,11 +51,11 @@ class BlobManager {
 
   /// Used for encoding text
   static encoder = new TextEncoder();
-  static encode = BlobManager.encoder.encode;
+  static encode = x => BlobManager.encoder.encode(x);
 
   /// Used for decoding text
   static decoder = new TextDecoder();
-  static decode = BlobManager.decoder.decode;
+  static decode = x => BlobManager.decoder.decode(x);
 
   /// Maps allocation IDs to allocations
   private allocations = new Map<Number, Uint8Array>();

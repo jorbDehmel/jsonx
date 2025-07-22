@@ -150,8 +150,13 @@ export class JSONX {
       } else if (entry.weight > 0) {
         out += '!'.repeat(entry.weight);
       }
-      out +=
-          ": " + entry.value.stringify(tabbing + "  ") + ",\n";
+      out += ": ";
+      if (entry.value) {
+        out += entry.value.stringify(tabbing + "  ");
+      } else {
+        out += "UNDEFINED";
+      }
+      out += ",\n";
     }
     out += tabbing + "}";
     return out;
@@ -277,8 +282,7 @@ export class JSONX {
       value = this.get(this.contents.cur().text);
       if (value == undefined) {
         value = new BlobInstance();
-        value.set(BlobManager.encoder.encode(
-            this.contents.cur().text));
+        value.set(BlobManager.encode(this.contents.cur().text));
       }
       this.contents.next();
     }
@@ -443,6 +447,33 @@ JSONX.env.add(new JSONXLambdaBody('path', (_, arg) => {
                 return contents;
               }), 'rawf');
 
+///
+JSONX.env.add(
+    new JSONXLambdaBody('formatString', (thisJSONX, arg) => {
+      let contents = arg as BlobInstance;
+      const formatString = contents.getString();
+
+      let out = '';
+      for (let i = 0; i + 1 < formatString.length; ++i) {
+        if (formatString[i] == '$' &&
+            formatString[i + 1] == '{') {
+          // Scope out
+          let end = i + 2;
+          while (formatString[end] != '}') {
+            ++end;
+          }
+          out += thisJSONX.get(formatString.substring(i, end));
+          i = end + 1;
+        } else {
+          out += formatString[i];
+        }
+      }
+
+      contents.set(BlobManager.encode(out));
+
+      return contents;
+    }), 'format');
+
 /// Localize some object
 JSONX.env.add(
     new JSONXLambdaBody('path_or_jsonx', (context, arg) => {
@@ -466,7 +497,7 @@ JSONX.env.add(
                       variable.weight);
         }
         let toReturn = new BlobInstance();
-        toReturn.set(BlobManager.encoder.encode('true'));
+        toReturn.set(BlobManager.encode('true'));
         return toReturn;
       }
     }), 'include');
@@ -481,8 +512,7 @@ let math = JSONX.env.add(new JSONX(), "math") as JSONX;
       if (isNumber(Math[name] as any)) {
         // Raw numbers
         let toAdd = new BlobInstance();
-        toAdd.set(
-            BlobManager.encoder.encode(Math[name].toString()));
+        toAdd.set(BlobManager.encode(Math[name].toString()));
         math.add(toAdd, name);
       } else if (name == "max" || name == "min") {
         // Array-input functions
@@ -495,7 +525,7 @@ let math = JSONX.env.add(new JSONX(), "math") as JSONX;
                              .getString()));
                    }
                    let out = new BlobInstance();
-                   out.set(BlobManager.encoder.encode(
+                   out.set(BlobManager.encode(
                        ((Math[name] as any)(input) as Number)
                            .toString()));
                    return out;
@@ -512,7 +542,7 @@ let math = JSONX.env.add(new JSONX(), "math") as JSONX;
                   ((arg as JSONX).get("exp") as BlobInstance)
                       .getString());
               let out = new BlobInstance();
-              out.set(BlobManager.encoder.encode(
+              out.set(BlobManager.encode(
                   ((Math[name] as any)(base, exp) as Number)
                       .toString()));
               return out;
@@ -523,7 +553,7 @@ let math = JSONX.env.add(new JSONX(), "math") as JSONX;
                    const x = Number.parseInt(
                        (arg as BlobInstance).getString());
                    let out = new BlobInstance();
-                   out.set(BlobManager.encoder.encode(
+                   out.set(BlobManager.encode(
                        ((Math[name] as any)(x) as Number)
                            .toString()));
                    return out;
