@@ -92,15 +92,15 @@ Although the `[ ... ]` ("array") syntax may seem different from
 the `{ ... }` ("object") syntax, they are actually the same.
 Indeed, both `{ 1, 2, 3 }` and `[ a: 1, b: 2, c: 3 ]` are
 perfectly legal. In the former case, the numbers are simply
-added without any names, accessible only by their indices.
-Indices work on arrays or non-arrays.
+added with names equal to the number of previously added
+members.
 
 ```js
 {
     a: { 4, 5, 6 },
     b: [ a: 1, b: 2, c: 3 ],
     c: a.0, // Resolves to "4"
-    d: b.2, // Resolves to "3"
+    d: b.c, // Resolves to "3"
 }
 ```
 

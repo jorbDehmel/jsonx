@@ -1,9 +1,9 @@
 /**
  * @file
- * @brief
+ * @brief Tests the BlobManager and BlobInstance classes
  */
 
-import {BlobInstance, BlobManager} from "../src/blob_manager";
+import {JSONXBlob} from "../src/blob";
 
 function assert(condition: boolean, msg?: string): void {
   if (!condition) {
@@ -16,25 +16,24 @@ function assert(condition: boolean, msg?: string): void {
 function main() {
   console.log('Running test_blob_manager tests...');
 
-  BlobManager.maxBytes = 8;
-  assert(BlobManager.bytesUsed == 0);
+  JSONXBlob.maxBytes = 8;
+  assert(JSONXBlob.bytesUsed == 0);
 
-  let a = new BlobInstance();
-  assert(BlobManager.bytesUsed == 0);
+  let a = new JSONXBlob();
+  assert(JSONXBlob.bytesUsed == 0);
 
   // Allocate all the allowed memory
-  a.set(BlobManager.encode("Hi there"));
-  assert(BlobManager.bytesUsed == 8);
+  a.set(JSONXBlob.encode("Hi there"));
+  assert(JSONXBlob.bytesUsed == 8);
 
   // Should still be at 8 bytes usage after this
   a.free();
-  assert(BlobManager.bytesUsed == 0);
+  assert(JSONXBlob.bytesUsed == 0);
 
   // Should throw an error
   let didFail = false;
   try {
-    a.set(
-        BlobManager.encode("Alabama banana charlie doughnut"));
+    a.set(JSONXBlob.encode("Alabama banana charlie doughnut"));
   } catch {
     didFail = true;
   }

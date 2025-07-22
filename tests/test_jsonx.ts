@@ -4,21 +4,28 @@
  */
 
 import {
-  BlobInstance,
-  BlobManager,
   JSONX,
+  JSONXBlob,
 } from "../src/parser";
 
-function assert(condition: boolean): void {
+function assert(condition: boolean,
+                msg: string = 'Assertion failed'): void {
   if (!condition) {
-    throw new Error('Assertion failed');
+    throw new Error(msg);
   }
 }
 
-function getblob(what: any): BlobInstance {
-  assert(what != undefined);
-  assert(what instanceof BlobInstance);
-  return what as BlobInstance;
+function assertEq(a: any, b: any) {
+  if (a != b) {
+    throw new Error(`Expected ${a} , ${b}`);
+  }
+}
+
+function getblob(what: any): JSONXBlob {
+  assert(what != undefined, 'Potential blob is undefined');
+  assert(what instanceof JSONXBlob,
+         'Potential blob is not a blob');
+  return what as JSONXBlob;
 }
 
 function get(on: any, path: (string|number)[]): any {
@@ -39,7 +46,7 @@ function main(): void {
   console.log(obj.stringify());
   if (obj instanceof JSONX) {
     let a = obj.get("value");
-    assert(getblob(a).getString() == "321");
+    assertEq(getblob(a).getString(), "321");
   } else {
     throw new Error("Failed instance assertion");
   }
@@ -50,7 +57,7 @@ function main(): void {
     let a = obj.get("a");
     if (a instanceof JSONX) {
       let b = a.get("b");
-      assert(getblob(b).getString() == "true");
+      assertEq(getblob(b).getString(), "true");
     } else {
       throw new Error("Failed instance assertion");
     }
@@ -61,30 +68,30 @@ function main(): void {
   obj = JSONX.loads('{a?: 123, a: true, a!: "Hi there!"}');
   console.log(obj.stringify());
 
-  assert(getblob(obj.get("a")).getString() == "\"Hi there!\"");
+  assertEq(getblob(obj.get("a")).getString(), "\"Hi there!\"");
 
   obj = JSONX.loads('[123, 321, 123]');
   console.log(obj.stringify());
-  assert(getblob(obj.get(1)).getString() == "321");
+  assertEq(getblob(obj.get(1)).getString(), "321");
 
   obj = JSONX.loads("{a: false, b: this.a}");
   console.log(obj.stringify());
-  assert(getblob(obj.get(1)).getString() == "false");
+  assertEq(getblob(obj.get('b')).getString(), "false");
 
   obj = JSONX.loads('{"a": false, "b": this."a"}');
   console.log(obj.stringify());
-  assert(getblob(obj.get('b')).getString() == "false");
+  assertEq(getblob(obj.get('"b"')).getString(), "false");
 
   obj = JSONX.loads('{a: "no", b: {a: "yes"}}');
   console.log(obj.stringify());
-  assert(getblob(get(obj, [ "b", "a" ])).getString() ==
-         '"yes"');
+  assertEq(getblob(get(obj, [ "b", "a" ])).getString(),
+           '"yes"');
 
   obj = JSONX.loads('{a: "no", b: {}}');
   console.log(obj.stringify());
-  assert(get(obj, [ "b", "a" ]) == undefined);
-  assert(obj.get("this") == obj);
-  assert(obj.get("b").get("parent") == obj);
+  assertEq(get(obj, [ "b", "a" ]), undefined);
+  assertEq(obj.get("this"), obj);
+  assertEq(obj.get("b").get("parent"), obj);
 
   // Circular dependency
   obj = JSONX.loads('{a: this, b: this.a.b}');
@@ -100,27 +107,27 @@ function main(): void {
   // Loadf: Note that we are running from ..
   let loaded = JSONX.loadf('./tests/files/test_1.jsonx');
   console.log(loaded.stringify());
-  assert(getblob(loaded.get("a")).getString() == '123');
-  assert(getblob(loaded.get("b")).getString() == '123');
-  assert(
-      getblob(get(loaded, [ "subscope", "a" ])).getString() ==
-      '123');
-  assert(
-      getblob(get(loaded, [ "subscope", "b" ])).getString() ==
-      '321');
+  assertEq(getblob(loaded.get("\"a\"")).getString(), '123');
+  assertEq(getblob(loaded.get("\"b\"")).getString(), '123');
+  assertEq(getblob(get(loaded, [ "\"subscope\"", "\"a\"" ]))
+               .getString(),
+           '123');
+  assertEq(getblob(get(loaded, [ "\"subscope\"", "\"b\"" ]))
+               .getString(),
+           '321');
 
   loaded = JSONX.loadf('./tests/files/test_2.jsonx');
   console.log(loaded.stringify());
-  assert(getblob(get(loaded, [ "test_1", "a" ])).getString() ==
-         '123');
-  assert(getblob(loaded.get("data")).getString() == '321');
+  assertEq(getblob(get(loaded, [ "test_1", "a" ])).getString(),
+           '123');
+  assertEq(getblob(loaded.get("data")).getString(), '321');
 
   loaded = JSONX.loadf('./tests/files/test_3.jsonx');
   console.log(loaded.stringify());
   assert(Math.abs(+getblob(loaded.get('local_e')).getString() -
                   Math.E) < 0.01);
-  assert(getblob(loaded.get('exponentiated')).getString() ==
-         '1024');
+  assertEq(getblob(loaded.get('exponentiated')).getString(),
+           '1024');
 
   loaded = JSONX.loadf('./tests/files/test_4.jsonx');
   console.log(loaded.stringify());
@@ -130,7 +137,7 @@ function main(): void {
                   Math.acos(Math.acos(1.0))) < 0.01);
 
   console.log(`Blob usage: ${
-      (100.0 * BlobManager.bytesUsed / BlobManager.maxBytes)
+      (100.0 * JSONXBlob.bytesUsed / JSONXBlob.maxBytes)
           .toPrecision(2)}%`);
 
   console.log('All test_jsonx test cases ran.');

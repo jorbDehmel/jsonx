@@ -4,17 +4,17 @@
 
 import {PathOrFileDescriptor, readFileSync} from "fs";
 
-import {BlobInstance, BlobManager} from "./blob_manager";
+import {JSONXBlob} from "./blob";
 import {Pos, tokenize} from "./lexer";
 
 /// The type of an entry in a JSONX object
-export type JSONXVarType = JSONX|BlobInstance|JSONXLambdaBody;
+export type JSONXVar = JSONX|JSONXBlob|JSONXLambdaBody;
 
 /// A single entry in an object: Contains name, value, and
 /// weight
 class Entry {
   /// The value owned by this entry
-  value: JSONXVarType;
+  value: JSONXVar;
 
   /// The weighting of this entry
   weight: number = 0;
@@ -37,14 +37,14 @@ class JSONXLambdaBody {
 
   /// The body which will be operated on when this object is
   /// called
-  body: JSONXVarType|((thisJSONX: JSONXVarType,
-                       arg: JSONXVarType) => JSONXVarType);
+  body: JSONXVar|
+      ((thisJSONX: JSONXVar, arg: JSONXVar) => JSONXVar);
 
   /// Creates a new lambda from capture name and body (where the
   /// body can be an arbitrary external function)
-  constructor(argName: String, body: JSONXVarType|
-              ((thisJSONX: JSONXVarType,
-                arg: JSONXVarType) => JSONXVarType)) {
+  constructor(argName: String,
+              body: JSONXVar|((thisJSONX: JSONXVar,
+                               arg: JSONXVar) => JSONXVar)) {
     this.argName = argName;
     this.body = body;
   }
@@ -61,15 +61,14 @@ class JSONXLambdaBody {
   }
 
   /// Dummy wrapper for typechecking: Always throws when called.
-  get(name: string): JSONXVarType {
+  get(_: string): JSONXVar {
     throw new Error("Expected JSONX, but saw lambda body");
   }
 
   /// Return the body, but with the named capture replaced by
   /// `arg`. `thisJSONX` is used in external calls for when we
   /// need to capture the calling scope.
-  call(thisJSONX: JSONXVarType,
-       arg: JSONXVarType): JSONXVarType {
+  call(thisJSONX: JSONXVar, arg: JSONXVar): JSONXVar {
     if (this.body instanceof Function) {
       // External call
       return this.body(thisJSONX, arg);
@@ -96,7 +95,7 @@ export class JSONX {
                maxBytesDA: number = 128_000,
                filepath?: PathOrFileDescriptor): JSONX {
     // Set max bytes
-    BlobManager.maxBytes = maxBytesDA;
+    JSONXBlob.maxBytes = maxBytesDA;
 
     // If a max time was given, start a timer
     let timeoutID: NodeJS.Timeout|undefined = undefined;
@@ -226,8 +225,8 @@ export class JSONX {
 
   /// Parses (NOT recursively) and object so that it can later
   /// be queried and resolved.
-  private parseObject(): JSONXVarType {
-    let value: JSONXVarType;
+  private parseObject(): JSONXVar {
+    let value: JSONXVar;
     if (this.contents.cur().text == "{") {
       // Object
       let stack: string[] = [ "{" ];
@@ -284,8 +283,8 @@ export class JSONX {
       // Literal
       value = this.get(this.contents.cur().text);
       if (value == undefined) {
-        value = new BlobInstance();
-        value.set(BlobManager.encode(this.contents.cur().text));
+        value = new JSONXBlob();
+        value.set(JSONXBlob.encode(this.contents.cur().text));
       }
       this.contents.next();
     }
@@ -374,7 +373,7 @@ export class JSONX {
   }
 
   /// Get the object with the given identifier (or undefined)
-  get(name: string|number): JSONXVarType|undefined {
+  get(name: string|number): JSONXVar|undefined {
     name = name.toString();
 
     // Keywords
@@ -413,8 +412,8 @@ export class JSONX {
   }
 
   /// Add an UNPARSED entry
-  add(value: JSONXVarType, name?: string,
-      weight: number = 0): JSONXVarType {
+  add(value: JSONXVar, name?: string,
+      weight: number = 0): JSONXVar {
     // We must parse our body to append to it
     this.ensureResolved();
     if (name == null) {
@@ -430,8 +429,7 @@ export class JSONX {
 
 /// Load a file as a scope
 JSONX.env.add(new JSONXLambdaBody('path', (_, arg) => {
-                const pathStr =
-                    (arg as BlobInstance).getString()!;
+                const pathStr = (arg as JSONXBlob).getString()!;
                 const out = JSONX.loadf(
                     pathStr.substring(1, pathStr.length - 1));
                 if (!Array.isArray(out)) {
@@ -443,7 +441,7 @@ JSONX.env.add(new JSONXLambdaBody('path', (_, arg) => {
 
 /// Load a file as a raw blob
 JSONX.env.add(new JSONXLambdaBody('path', (_, arg) => {
-                let contents = arg as BlobInstance;
+                let contents = arg as JSONXBlob;
                 const path = contents.getString();
                 contents.set(readFileSync(
                     path.substring(1, path.length - 1)));
@@ -453,7 +451,7 @@ JSONX.env.add(new JSONXLambdaBody('path', (_, arg) => {
 /// Format string utility
 JSONX.env.add(
     new JSONXLambdaBody('formatString', (thisJSONX, arg) => {
-      let contents = arg as BlobInstance;
+      let contents = arg as JSONXBlob;
       const formatString = contents.getString();
 
       let out = '';
@@ -472,7 +470,7 @@ JSONX.env.add(
         }
       }
 
-      contents.set(BlobManager.encode(out));
+      contents.set(JSONXBlob.encode(out));
 
       return contents;
     }), 'format');
@@ -486,7 +484,7 @@ JSONX.env.add(
       } else if (arg instanceof JSONXLambdaBody) {
         throw new Error(
             "Cannot use lambda body as argument to 'include'");
-      } else if (arg instanceof BlobInstance) {
+      } else if (arg instanceof JSONXBlob) {
         // Filepath to open, then localize
         return (JSONX.env.get("include") as JSONXLambdaBody)
             .call(context,
@@ -499,8 +497,8 @@ JSONX.env.add(
           context.add(variable.value, variable.name,
                       variable.weight);
         }
-        let toReturn = new BlobInstance();
-        toReturn.set(BlobManager.encode('true'));
+        let toReturn = new JSONXBlob();
+        toReturn.set(JSONXBlob.encode('true'));
         return toReturn;
       }
     }), 'include');
@@ -514,8 +512,8 @@ let math = JSONX.env.add(new JSONX(), "math") as JSONX;
     .forEach((name) => {
       if (isNumber(Math[name] as any)) {
         // Raw numbers
-        let toAdd = new BlobInstance();
-        toAdd.set(BlobManager.encode(Math[name].toString()));
+        let toAdd = new JSONXBlob();
+        toAdd.set(JSONXBlob.encode(Math[name].toString()));
         math.add(toAdd, name);
       } else if (name == "max" || name == "min") {
         // Array-input functions
@@ -524,11 +522,11 @@ let math = JSONX.env.add(new JSONX(), "math") as JSONX;
                    for (let i = 0; i < (arg as JSONX).length;
                         ++i) {
                      input.push(Number.parseInt(
-                         ((arg as JSONX).get(i) as BlobInstance)
+                         ((arg as JSONX).get(i) as JSONXBlob)
                              .getString()));
                    }
-                   let out = new BlobInstance();
-                   out.set(BlobManager.encode(
+                   let out = new JSONXBlob();
+                   out.set(JSONXBlob.encode(
                        ((Math[name] as any)(input) as Number)
                            .toString()));
                    return out;
@@ -539,13 +537,13 @@ let math = JSONX.env.add(new JSONX(), "math") as JSONX;
         math.add(
             new JSONXLambdaBody('arg', (_, arg) => {
               const base = Number.parseInt(
-                  ((arg as JSONX).get("base") as BlobInstance)
+                  ((arg as JSONX).get("base") as JSONXBlob)
                       .getString());
               const exp = Number.parseInt(
-                  ((arg as JSONX).get("exp") as BlobInstance)
+                  ((arg as JSONX).get("exp") as JSONXBlob)
                       .getString());
-              let out = new BlobInstance();
-              out.set(BlobManager.encode(
+              let out = new JSONXBlob();
+              out.set(JSONXBlob.encode(
                   ((Math[name] as any)(base, exp) as Number)
                       .toString()));
               return out;
@@ -554,9 +552,9 @@ let math = JSONX.env.add(new JSONX(), "math") as JSONX;
         // Single-argument functions
         math.add(new JSONXLambdaBody('arg', (_, arg) => {
                    const x = Number.parseInt(
-                       (arg as BlobInstance).getString());
-                   let out = new BlobInstance();
-                   out.set(BlobManager.encode(
+                       (arg as JSONXBlob).getString());
+                   let out = new JSONXBlob();
+                   out.set(JSONXBlob.encode(
                        ((Math[name] as any)(x) as Number)
                            .toString()));
                    return out;
@@ -564,4 +562,4 @@ let math = JSONX.env.add(new JSONX(), "math") as JSONX;
       }
     });
 
-export {BlobManager, BlobInstance};
+export {JSONXBlob};

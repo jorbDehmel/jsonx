@@ -137,23 +137,6 @@ function tokenize(src: string, filepath?: string): Token[] {
   return tokens;
 }
 
-/// Thrown when a parse error occurs
-class ParseError {
-  /// The error message
-  msg: string;
-
-  /// The place in the token stream where the error occurred (if
-  /// that information is available)
-  tok?: Token;
-
-  /// Construct w/ some error message and (optionally) the token
-  /// that generated it
-  constructor(msg: string, tok?: Token) {
-    this.msg = msg;
-    this.tok = tok;
-  }
-}
-
 /// Represents a position in a token stream
 class Pos {
   /// The list of tokens to iterate over
@@ -219,4 +202,4 @@ class Pos {
   }
 }
 
-export {Token, tokenize, ParseError, Pos};
+export {Token, tokenize, Pos};

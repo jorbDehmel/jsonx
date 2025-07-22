@@ -1,0 +1,14 @@
+// Church numerals in JSONX
+{
+    // Zero in Church numerals
+    zero: f => x => x,
+
+    // Successor-of operator
+    S: n => f => x => n(f)(f(x)),
+
+    // Addition
+    add: a => b => f => x => a(f)(b(f)(x)),
+
+    // Multiplication
+    mult: a => b => f => x => a(b)(x),
+}
