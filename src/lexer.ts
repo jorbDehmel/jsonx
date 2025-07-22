@@ -168,10 +168,13 @@ class Pos {
     this.pos = pos;
   }
 
+  /// Get the current position in the array
   tell(): number {
     return this.pos;
   }
 
+  /// Create a "child" position with a duplicate of some
+  /// subsection of this object's array
   child(first: number, first_after: number): Pos {
     let l: Token[] = [];
     for (let i = first;

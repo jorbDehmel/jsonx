@@ -3,22 +3,34 @@
  * @brief Manages blobs, what else is there to say
  */
 
+import {JSONXVarType} from "./parser";
+
 /// A lent-out copy-on-write pointer to shared
 /// memory
 class BlobInstance {
+  /// Turn into a string
+  stringify(_: any = null): string {
+    return `"${this.getString()}"`;
+  }
+
+  /// Dummy fn to satisfy type requirements
+  get(_: string): JSONXVarType {
+    throw new Error("Expected JSONX, but saw BlobInstance");
+  }
+
   /// Free this allocation
   free() {
     BlobManager.instance.free(this);
   }
 
   /// Get the allocation data
-  get(): Uint8Array|undefined {
+  getBytes(): Uint8Array|undefined {
     return BlobManager.instance.get(this);
   }
 
   /// Get the allocation data as a string
   getString(): string|undefined {
-    const out = this.get();
+    const out = this.getBytes();
     if (out == undefined) {
       return undefined;
     }
@@ -39,9 +51,11 @@ class BlobManager {
 
   /// Used for encoding text
   static encoder = new TextEncoder();
+  static encode = BlobManager.encoder.encode;
 
   /// Used for decoding text
   static decoder = new TextDecoder();
+  static decode = BlobManager.decoder.decode;
 
   /// Maps allocation IDs to allocations
   private allocations = new Map<Number, Uint8Array>();

@@ -1,8 +1,68 @@
 
-# `jsonx`
+# `jsx`
 
 A constraint/query data language based on JSON (of which it is a
 superset).
+
+1. Give text
+2. Text is lexed to queryable token stream
+3. Upon SINGLE query, the result is blocked out and, if atomic,
+    resolved. Otherwise, results are queryable.
+
+Note: If the result of a query is a lambda call, that call will
+THEN AND ONLY THEN be evaluated. The result of that query will
+be the result of the call. We will parse a block WHEN AND ONLY
+WHEN that block is queried.
+
+query = parsing = lambda resolution
+
+Parse 'fizz' -> Get all LHS in 'fizz' and block out RHS-es
+Query child 'foo' -> Parse the RHS of child 'foo'
+
+Moral of the story: it's ok to do lambda call resolution at
+block parse-time, since parsing is querying.
+
+Lifetime:
+1. JSONX instantiated on some token stream segment. No parse yet
+2. LOOP
+    1. Someone queries a child 'name'
+    2. If we haven't already, RESOLVE (EG calls) our block and
+        parse all LHS-es, blocking respective RHS-es
+    3. Go to 'name', return its UNPARSED RHS as a JSONX
+
+```ts
+class JSONX {
+    constructor(pos: Pos) {
+        this.pos = pos;
+
+        // Calls and references
+        while (this.isIndirection) {
+            this.resolveIndirection();
+        }
+        // Now a scope or literal
+    }
+
+    get(name: string): JSONXVarType|undefined {
+        // Resolve our body if need be
+        if (!this.resolved) {
+            // Discover all LHS and block out RHS
+            while (!pos.done()) {
+                // Parses LHS info and blocks (skippingly) RHS
+                parseEntry();
+            }
+        }
+
+        // Find the right entry here
+        let result = ...;
+
+        if (result.rhs.isLiteral) {
+            // Skips
+            return result.rhs.asLiteral();
+        }
+        return result.rhs;
+    }
+}
+```
 
 ## Language
 
@@ -71,7 +131,7 @@ console.log(obj.get("out"));
 
 Suppose we have the document
 
-```json
+```js
 obj: {
     foo: "Hi",
     fizz: [
@@ -80,24 +140,26 @@ obj: {
         this.fizz
     ],
     fn: x => this.foo,
+    call: fn(123)
 }
 ```
 
 Once loaded, the object looks like this:
 
-```json
+```js
 /* Unresolved */
 ```
 
 If we queries `obj.fizz.1`, the following intermediate steps
 would be taken:
 
-```json
+```js
 // Step 1: We want obj, so resolve that
 obj: {
     foo: /* Unresolved */,
     fizz: /* Unresolved */,
     fn: /* Unresolved */,
+    call: /* Unresolved */
 }
 
 // Step 2: We want obj.fizz, so resolve that

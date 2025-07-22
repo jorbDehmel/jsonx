@@ -12,12 +12,19 @@ function parseAndPrint(text: string) {
   console.log(`Parsing raw text '${text}'`);
   let s = JSONX.loads(text);
   console.log('Parsed:');
-  console.log(s);
+
+  if (s instanceof JSONX) {
+    console.log(s.stringify());
+  } else {
+    console.log(s);
+  }
   console.log();
 }
 
 /// Runs test cases
 function main() {
+  console.log('Running test_parser test cases...');
+
   // Null case
   parseAndPrint('');
 
@@ -52,6 +59,8 @@ function main() {
       '{api : {}, false: true, "false": this.false, ":": ' +
       '"false"."false", defaults: {x: 3, y: 4, z: parent.z}, ' +
       'y: defaults.y + 1, y!!!!: 77 "z": 44} == 77');
+
+  console.log('All test_parser test cases ran.');
 }
 
 main();

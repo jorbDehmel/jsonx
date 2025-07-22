@@ -28,7 +28,7 @@ Blob = { blobs | 0 or more bytes of data }
 Void = { null = Blob(0) }
 Boolean = { true = Blob(-1), false = Blob(0) }
 String = { strings | 0 or more unicode codepoints }
-Integer = { ints | blobs representing 2's compliment values }
+Integer = { ints | blobs representing 2s compliment values }
 Float = { [mantessa : Integer,base : Intger,exponent : Integer ] }
 Function = { (args) => expression }
 Mapping = { Value : Value }

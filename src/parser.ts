@@ -1,44 +1,73 @@
 /**
- * @brief Rewrite of the parser to not evaluate things for as
- * long as possible
+ * @brief
  */
 
-import {readFileSync} from "fs";
+import {PathOrFileDescriptor, readFileSync} from "fs";
 
 import {BlobInstance, BlobManager} from "./blob_manager";
 import {Pos, tokenize} from "./lexer";
 
+/// The type of an entry in a JSONX object
 export type JSONXVarType = JSONX|BlobInstance|JSONXLambdaBody;
 
-///
+/// A single entry in an object: Contains name, value, and
+/// weight
 class Entry {
+  /// The value owned by this entry
   value: JSONXVarType;
-  weight: number = 0;
-}
 
-///
-class NamedEntry extends Entry {
+  /// The weighting of this entry
+  weight: number = 0;
+
+  /// The name of this entry: This may not be unique!
   name: string;
 }
 
-/// "statically typed language" my foot
+/// Returns whether an entry is a number
 function isNumber(data: unknown): data is number {
+  // "statically typed language" my foot
   return typeof data === 'number';
 }
 
 /// A lambda body which can be evaluated
 class JSONXLambdaBody {
+  /// The capture variable: The name to be replaced in the body
+  /// with the passed argument upon call
   argName: String;
+
+  /// The body which will be operated on when this object is
+  /// called
   body: JSONXVarType|((thisJSONX: JSONXVarType,
                        arg: JSONXVarType) => JSONXVarType);
 
-  constructor(args: String, body: JSONXVarType|
+  /// Creates a new lambda from capture name and body (where the
+  /// body can be an arbitrary external function)
+  constructor(argName: String, body: JSONXVarType|
               ((thisJSONX: JSONXVarType,
                 arg: JSONXVarType) => JSONXVarType)) {
-    this.argName = args;
+    this.argName = argName;
     this.body = body;
   }
 
+  /// Return a string representation of this object
+  stringify(tabbing: string = ""): string {
+    let out = `${this.argName} => `;
+    if (this.body instanceof Function) {
+      out += "...";
+    } else {
+      out += this.body.stringify(tabbing);
+    }
+    return out;
+  }
+
+  ///
+  get(name: string): JSONXVarType {
+    throw new Error("Expected JSONX, but saw lambda body");
+  }
+
+  /// Return the body, but with the named capture replaced by
+  /// `arg`. `thisJSONX` is used in external calls for when we
+  /// need to capture the calling scope.
   call(thisJSONX: JSONXVarType,
        arg: JSONXVarType): JSONXVarType {
     if (this.body instanceof Function) {
@@ -51,32 +80,40 @@ class JSONXLambdaBody {
   }
 }
 
-///
+/**
+ * @brief A queryable object. Similar to a standard JSON object,
+ * but contains lambdas, references, etc. to reduce code reuse
+ */
 export class JSONX {
-  ///
+  /// Available to all JSONX objects via the `env` keyword. This
+  /// is where all external interfacing occurs
   static env = new JSONX();
 
-  static loads(text: string, maxMs?: number,
-               maxBytesDA?: number, filepath?: string): JSONX {
+  /** */
+  static loads(text: string, maxMs: number = 5_000,
+               maxBytesDA: number = 128_000,
+               filepath?: PathOrFileDescriptor): JSONX {
     // Set max bytes
     BlobManager.maxBytes = maxBytesDA;
 
     // If a max time was given, start a timer
-    let timeoutID: NodeJS.Timeout;
+    let timeoutID: NodeJS.Timeout|undefined = undefined;
     if (maxMs != undefined) {
-      timeoutID = setTimeout(
-          () => {
-            throw Error(`Exceeded loadsJSONX time limit of ${
-                maxMs} ms`);
-          },
-      );
+      timeoutID = setTimeout(() => {
+        throw Error(
+            `Exceeded loadsJSONX time limit of ${maxMs} ms`);
+      }, maxMs);
     }
 
     // Lex
-    const tokens = tokenize(text, filepath);
+    const tokens = tokenize(text, filepath ? filepath.toString()
+                                           : undefined);
 
     // Parse
-    if (tokens.length < 2) {
+    if (tokens.length == 0) {
+      if (timeoutID != undefined) {
+        clearTimeout(timeoutID);
+      }
       return undefined;
     }
 
@@ -84,17 +121,40 @@ export class JSONX {
     let parsed = new JSONX(pos);
 
     // If we have a timer running, cancel it
-    if (maxMs != undefined) {
+    if (timeoutID != undefined) {
       clearTimeout(timeoutID);
     }
     return parsed.get(0) as JSONX;
   }
 
-  static loadf(filepath: string, maxMs: number = 60_000,
+  ///
+  static loadf(filepath: PathOrFileDescriptor,
+               maxMs: number = 5_000,
                maxBytesDA: number = 128_000): JSONX {
     // Load file contents
     const text = readFileSync(filepath).toString();
     return JSONX.loads(text, maxMs, maxBytesDA, filepath);
+  }
+
+  ///
+  stringify(tabbing: string = ""): string {
+    if (tabbing.length > 20) {
+      return "OVERTABBED";
+    }
+
+    let out = "{\n";
+    for (const entry of this.variables) {
+      out += `${tabbing}  ${entry.name}`;
+      if (entry.weight < 0) {
+        out += '?'.repeat(-entry.weight);
+      } else if (entry.weight > 0) {
+        out += '!'.repeat(entry.weight);
+      }
+      out +=
+          ": " + entry.value.stringify(tabbing + "  ") + ",\n";
+    }
+    out += tabbing + "}";
+    return out;
   }
 
   //////////////////////////////////////////////////////////////
@@ -102,11 +162,14 @@ export class JSONX {
   ///
   private parent?: JSONX;
 
+  /// If not provided, same as TS's `this`
+  private thisJSONX?: JSONX;
+
   ///
   private contents: Pos;
 
   ///
-  private members = new Map<string, Entry>();
+  private members: Entry[] = [];
 
   ///
   private isResolved: boolean = false;
@@ -114,28 +177,48 @@ export class JSONX {
   //////////////////////////////////////////////////////////////
 
   /// Advances the number until it points to the last token of
-  /// an object, logging the object in this.contents. Returns
-  /// the new index
-  private parseObject(): void {
-    // Parse name if provided (note: weight must go in here)
-    let name: string = this.members.size.toString();
+  /// an object, logging the object in this.contents.
+  private parseEntry(): void {
+    // Set up default values (no name or weight)
+    let name: string = this.members.length.toString();
     let weight = 0;
 
-    while (this.contents.peek().text == "?") {
-      --weight;
-      this.contents.next();
-    }
-    while (this.contents.peek().text == "!") {
-      ++weight;
-      this.contents.next();
-    }
-
-    if (this.contents.peek().text == ":") {
+    // If provided, parse weight (multiple colons are allowed)
+    if (this.contents.peek().text == ":" ||
+        this.contents.peek().text == "!" ||
+        this.contents.peek().text == "?") {
       name = this.contents.cur().text;
-      this.contents.next(2);
+      this.contents.next();
+
+      while (this.contents.cur().text == "?") {
+        --weight;
+        this.contents.next();
+      }
+      while (this.contents.cur().text == "!") {
+        ++weight;
+        this.contents.next();
+      }
+      while (this.contents.cur().text == ":") {
+        this.contents.next();
+      }
     }
 
     // Parse value
+    let value = this.parseObject();
+
+    // Push key-weight-value
+    this.members.push(
+        {name : name, value : value, weight : weight});
+
+    // Ignore any commas or semicolons
+    while (this.contents.cur().text == "," ||
+           this.contents.cur().text == ";") {
+      this.contents.next();
+    }
+  }
+
+  ///
+  private parseObject(): JSONXVarType {
     let value: JSONXVarType;
     if (this.contents.cur().text == "{") {
       // Object
@@ -159,7 +242,7 @@ export class JSONX {
         }
         this.contents.next();
       }
-      const first_after = this.contents.tell();
+      const first_after = this.contents.tell() - 1;
 
       value = new JSONX(this.contents.child(first, first_after),
                         this);
@@ -185,113 +268,156 @@ export class JSONX {
         }
         this.contents.next();
       }
-      const firstAfter = this.contents.tell();
-
-      value = new JSONX(this.contents.child(first, firstAfter),
-                        this);
-    } else if (this.contents.peek(1).text == ".") {
-      // Path to be resolved
-      const first = this.contents.tell();
-      while (this.contents.peek(1).text == ".") {
-        this.contents.next(2);
-      }
-      this.contents.next();
-      const firstAfter = this.contents.tell();
+      const firstAfter = this.contents.tell() - 1;
 
       value = new JSONX(this.contents.child(first, firstAfter),
                         this);
     } else {
       // Literal
-      value = new BlobInstance();
-      value.set(
-          BlobManager.encoder.encode(this.contents.cur().text));
+      value = this.get(this.contents.cur().text);
+      if (value == undefined) {
+        value = new BlobInstance();
+        value.set(BlobManager.encoder.encode(
+            this.contents.cur().text));
+      }
       this.contents.next();
     }
 
-    // Push key-weight-value
-    if (!this.members.has(name) ||
-        this.members.get(name).weight < weight) {
-      this.members.set(name, {value : value, weight : weight});
+    // Math, lambdas and calls thereof can be here
+    let keepLooking = true;
+    while (keepLooking) {
+      keepLooking = false;
+      if (this.contents.cur().text == "(") {
+        // Lambda call
+        if (!(value instanceof JSONXLambdaBody)) {
+          console.log(value.stringify());
+          throw new Error("Cannot call non-lambda");
+        }
+
+        // Advance past open paren
+        this.contents.next();
+
+        // Parse arg object
+        let arg = this.parseObject();
+
+        // Advance past close paren
+        if (this.contents.cur().text != ")") {
+          throw new Error(
+              "Missing lambda call closing parenthesis");
+        }
+        this.contents.next();
+
+        // Replace w/ call
+        value = value.call(this, arg);
+        keepLooking = true;
+      } else if (this.contents.cur().text == "=>") {
+        // Lambda definition
+        // Value is retroactively the argument name
+        this.contents.next();
+        value = new JSONXLambdaBody(value.stringify(),
+                                    this.parseObject());
+        keepLooking = true;
+      } else if (this.contents.peek(1).type == "MATH") {
+        throw new Error('Math is unimplemented');
+        keepLooking = true;
+      } else if (this.contents.cur().text == ".") {
+        // Path to be resolved
+        this.contents.next();
+        let name = this.contents.cur().text;
+        this.contents.next();
+        value = value.get(name);
+        keepLooking = true;
+      }
     }
+
+    return value;
   }
 
   //////////////////////////////////////////////////////////////
 
   ///
-  constructor(contents: Pos = new Pos([], 0), parent?: JSONX) {
+  constructor(contents: Pos = new Pos([], 0), parent?: JSONX,
+              thisJSONX?: JSONX) {
     this.parent = parent;
     this.contents = contents;
+    this.thisJSONX = thisJSONX;
   }
 
   /// Get the number of members
   get length(): number {
-    return this.members.size;
+    return this.members.length;
   }
 
   /// Get the keys of members
-  get variables(): NamedEntry[] {
+  get variables(): Entry[] {
     this.ensureResolved();
-    let out: NamedEntry[] = [];
-    this.members.forEach((value, key) => {
-      let toAdd = new NamedEntry();
-      toAdd.name = key;
-      toAdd.value = value.value;
-      toAdd.weight = value.weight;
-      out.push(toAdd);
-    });
-    return out;
+    return this.members;
   }
 
   ///
   private ensureResolved() {
     if (!this.isResolved) {
       // Resolve
-      while (!this.contents.done()) {
-        this.parseObject();
-      }
       this.isResolved = true;
+      while (!this.contents.done()) {
+        this.parseEntry();
+      }
       delete this.contents;
     }
   }
 
   ///
-  get(name: string|number): JSONXVarType {
+  get(name: string|number): JSONXVarType|undefined {
     name = name.toString();
 
+    // Keywords
     if (name == "this") {
-      return this;
+      return this.thisJSONX ?? this;
     } else if (name == "parent") {
       return this.parent;
     } else if (name == "global") {
-      if (this.parent == null) {
-        return this;
-      } else {
+      if (this.parent) {
         return this.parent.get(name);
+      } else {
+        return this;
       }
     } else if (name == "env") {
       return JSONX.env;
     }
 
+    // Ensure our body has been parsed
     this.ensureResolved();
 
-    if (this.members.has(name)) {
-      return this.members.get(name).value;
-    } else {
-      return null;
+    // Locate the thing we need
+    let out: Entry|undefined = undefined;
+    this.members
+        .filter((value) => {
+          return value.name == name;
+        })
+        .forEach((value) => {
+          if (out == null || out.weight < value.weight) {
+            out = value;
+          }
+        });
+    if (out == undefined) {
+      return undefined;
     }
+    return out.value;
   }
 
+  /// Add an UNPARSED entry
   add(value: JSONXVarType, name?: string,
       weight: number = 0): JSONXVarType {
+    // We must parse our body to append to it
     this.ensureResolved();
     if (name == null) {
-      name = this.members.size.toString();
+      name = this.members.length.toString();
     }
-    if (!this.members.has(name) ||
-        this.members.get(name).weight < weight) {
-      this.members.set(name, {value : value, weight : weight});
-    }
-    return this.members.get(name).value;
+
+    // Append and return
+    this.members.push(
+        {name : name, value : value, weight : weight});
+    return this.members[this.members.length - 1].value;
   }
 }
 

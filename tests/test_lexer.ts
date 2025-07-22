@@ -37,6 +37,8 @@ function testCase(toLex: string, expected: string[]) {
 
 /// Run several test cases
 function main() {
+  console.log('Running test_lexer test cases...');
+
   // Empty document
   testCase('', [ 'EOF' ]);
 
