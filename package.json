@@ -1,7 +1,7 @@
 {
   "name": "jsonx",
   "version": "0.0.1",
-  "description": "A superset of JSON",
+  "description": "A Turing-complete superset of JSON",
   "main": "src/parser",
   "scripts": {
     "tsc": "tsc",

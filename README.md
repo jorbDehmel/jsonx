@@ -1,5 +1,5 @@
 
-# `JSONX / jsx`
+# `JSONX`
 
 ("Jay-sonks" or "JSON-ex")
 
@@ -82,11 +82,43 @@ console.log(obj.get("out"));
 */
 ```
 
+## Weights
+
+If there are multiple results for a single query, whichever has
+the higher "weight" (**lazily**) will be returned. The `?`
+operator decreases an entry's weight by one, while the `!`
+operator increases it by one. For instance, if we are given the
+JSONX object
+
+```js
+obj: {
+    a?: "-1",
+    a!!!: "3"
+}
+```
+
+The query `obj.a` will return the value `"3"`. Importantly,
+since each query is blind to the previous and subsequent ones,
+the result of a compound query may not have the globally optimum
+weight (only the local, or "greedy" optima)!
+
+```js
+a: {
+    b?: { c!!!!: "Best a.b.c    +3" },
+    b:  { c: "Second-best a.b.c +0" },
+    b!: { c????: "Worst a.b.c   -3" },
+}
+```
+
+Querying `a.b.c` will yield `"Worst a.b.c   -3"`, even though it
+is globally the worst choice.
+
 ## Types
 
 There are only three types in JSONX: Objects, blobs/strings, and
-lambdas. Objects have members, blobs are copy-on-write literals,
-and lambdas are callable objects (either internal or external).
+lambdas. Objects have members, blobs are copy-on-write byte
+literals, and lambdas are callable objects (either internal or
+external).
 
 Although the `[ ... ]` ("array") syntax may seem different from
 the `{ ... }` ("object") syntax, they are actually the same.
@@ -253,6 +285,14 @@ The process of "resolving" a JSONX block amounts to finding all
 entries held directly within it. Once a block is resolved, later
 queries do not have to resolve it.
 
+## A Note on Stringification
+
+The `stringify` method is provided for debugging **only**. This
+method recursively resolves all contents of a JSONX object, the
+results of which may be **infinitely long**. Far from a simple
+JSON version of the structure, it can be an
+infinitely-convoluted recursive nightmare tree.
+
 ## EBNF
 
 JSONX is *not* parsed via EBNF: Here is a rough approximation
@@ -301,7 +341,7 @@ you must process an unverified JSONX document, the parser has a
 few safeguards.
 
 ```ts
-const a = JSONX.loadf('foo.jsx',
+const a = JSONX.loadf('foo.jsonx',
     5_000,  // Max milliseconds to spend
     128_000 // Max bytes of memory to spend
 );
@@ -314,8 +354,9 @@ const b = JSONX.loads('...',
 
 If the parsing process exceeds the given boundaries, an error
 will be thrown. If no boundaries are provided,
-**none are applied**.
+**none are applied**. There can be no guarantee that any query
+will halt!
 
 ## License
 
-Warren MacEvoy, 2025, MIT License
+Warren MacEvoy, Jordan Dehmel, 2025, MIT License

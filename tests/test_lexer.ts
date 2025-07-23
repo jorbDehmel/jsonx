@@ -40,24 +40,23 @@ function main() {
   console.log('Running test_lexer test cases...');
 
   // Empty document
-  testCase('', [ 'EOF' ]);
+  testCase('', []);
 
   // Document with empty object
-  testCase('{}', [ '{', '}', 'EOF' ]);
+  testCase('{}', [ '{', '}' ]);
 
   // Simple mapping w/ spacing
   testCase('{ false : "true" }',
-           [ '{', 'false', ':', '"true"', '}', 'EOF' ]);
+           [ '{', 'false', ':', '"true"', '}' ]);
 
   // Simple mapping w/o spacing
   testCase('{false: "true"}',
-           [ '{', 'false', ':', '"true"', '}', 'EOF' ]);
+           [ '{', 'false', ':', '"true"', '}' ]);
 
   // Complex mapping w/ array, names, math
   testCase('alabama: [1, 2, {banana: clown + 1, clown: 12}]', [
-    'alabama', ':',      '[',  '1',     ',', '2',  ',',
-    '{',       'banana', ':',  'clown', '+', '1',  ',',
-    'clown',   ':',      '12', '}',     ']', 'EOF'
+    'alabama', ':', '[', '1', ',', '2', ',', '{', 'banana', ':',
+    'clown', '+', '1', ',', 'clown', ':', '12', '}', ']'
   ]);
 
   // Lambda object w/ default args, free variables and complex
@@ -107,14 +106,13 @@ function main() {
              '*',
              '2',
              '}',
-             ')',
-             'EOF'
+             ')'
            ]);
 
   // Weighted object + hierarchical names
   testCase('a!!!: {b?: 123}, c: a.0', [
     'a', '!', '!', '!', ':', '{', 'b', '?', ':', '123', '}',
-    ',', 'c', ':', 'a', '.', '0', 'EOF'
+    ',', 'c', ':', 'a', '.', '0'
   ]);
 
   //////////////////////////////////////////////////////////////
@@ -133,105 +131,94 @@ function main() {
              'std', '.',       'read', '(',    'file',    ')',
              ',',   'encrypt', ':',    '{',    'message', ':',
              '?',   ',',       'key',  ':',    '?',       '}',
-             '=>',  '...',     '}',    'EOF'
+             '=>',  '...',     '}'
            ]);
 
-  testCase('true', [ 'true', 'EOF' ]);
+  testCase('true', [ 'true' ]);
 
-  testCase('.......', [ '...', '...', '.', 'EOF' ]);
+  testCase('.......', [ '...', '...', '.' ]);
 
   testCase('2*acos(0) // pi',
-           [ '2', '*', 'acos', '(', '0', ')', 'EOF' ]);
+           [ '2', '*', 'acos', '(', '0', ')' ]);
 
   testCase('read(\'aes.key\') // data as binary blob',
-           [ 'read', '(', '\'aes.key\'', ')', 'EOF' ]);
+           [ 'read', '(', '\'aes.key\'', ')' ]);
 
-  testCase(
-      'encrypt(), decrypt()',
-      [ 'encrypt', '(', ')', ',', 'decrypt', '(', ')', 'EOF' ]);
+  testCase('encrypt(), decrypt()',
+           [ 'encrypt', '(', ')', ',', 'decrypt', '(', ')' ]);
 
-  testCase('use(std)', [ 'use', '(', 'std', ')', 'EOF' ]);
+  testCase('use(std)', [ 'use', '(', 'std', ')' ]);
 
   testCase('b16(\'dead.beef\')',
-           [ 'b16', '(', '\'dead.beef\'', ')', 'EOF' ]);
+           [ 'b16', '(', '\'dead.beef\'', ')' ]);
 
-  testCase(
-      'int(b10(\'32\'))',
-      [ 'int', '(', 'b10', '(', '\'32\'', ')', ')', 'EOF' ]);
+  testCase('int(b10(\'32\'))',
+           [ 'int', '(', 'b10', '(', '\'32\'', ')', ')' ]);
 
-  testCase('b16.decode(\'dead.beef\')', [
-    'b16', '.', 'decode', '(', '\'dead.beef\'', ')', 'EOF'
-  ]);
+  testCase('b16.decode(\'dead.beef\')',
+           [ 'b16', '.', 'decode', '(', '\'dead.beef\'', ')' ]);
 
   testCase('b64.decode(\'peas.and.carrots\')', [
-    'b64', '.', 'decode', '(', '\'peas.and.carrots\'', ')',
-    'EOF'
+    'b64', '.', 'decode', '(', '\'peas.and.carrots\'', ')'
   ]);
 
-  testCase('int.decode(\'dead.beef\')', [
-    'int', '.', 'decode', '(', '\'dead.beef\'', ')', 'EOF'
-  ]);
+  testCase('int.decode(\'dead.beef\')',
+           [ 'int', '.', 'decode', '(', '\'dead.beef\'', ')' ]);
 
-  testCase('uint()', [ 'uint', '(', ')', 'EOF' ]);
+  testCase('uint()', [ 'uint', '(', ')' ]);
 
-  testCase('int(\'32\')', [ 'int', '(', '\'32\'', ')', 'EOF' ]);
+  testCase('int(\'32\')', [ 'int', '(', '\'32\'', ')' ]);
 
-  testCase('float(\'32\')',
-           [ 'float', '(', '\'32\'', ')', 'EOF' ]);
+  testCase('float(\'32\')', [ 'float', '(', '\'32\'', ')' ]);
 
   testCase('byte_size(\'apple\')',
-           [ 'byte_size', '(', '\'apple\'', ')', 'EOF' ]);
+           [ 'byte_size', '(', '\'apple\'', ')' ]);
 
   testCase('char_size(\'apple\')',
-           [ 'char_size', '(', '\'apple\'', ')', 'EOF' ]);
+           [ 'char_size', '(', '\'apple\'', ')' ]);
 
   testCase('{ x : 3 , y : 7}.x', [
-    '{', 'x', ':', '3', ',', 'y', ':', '7', '}', '.', 'x', 'EOF'
+    '{', 'x', ':', '3', ',', 'y', ':', '7', '}', '.', 'x'
   ]);
 
-  testCase('number.mantessa',
-           [ 'number', '.', 'mantessa', 'EOF' ]);
+  testCase('number.mantessa', [ 'number', '.', 'mantessa' ]);
 
-  testCase('number.base', [ 'number', '.', 'base', 'EOF' ]);
+  testCase('number.base', [ 'number', '.', 'base' ]);
 
-  testCase('number.exponent',
-           [ 'number', '.', 'exponent', 'EOF' ]);
+  testCase('number.exponent', [ 'number', '.', 'exponent' ]);
 
   testCase('integer : number { number.exponent => 0 }', [
     'integer', ':', 'number', '{', 'number', '.', 'exponent',
-    '=>', '0', '}', 'EOF'
+    '=>', '0', '}'
   ]);
 
-  testCase('x.foo()', [ 'x', '.', 'foo', '(', ')', 'EOF' ]);
+  testCase('x.foo()', [ 'x', '.', 'foo', '(', ')' ]);
 
-  testCase('x : me.x', [ 'x', ':', 'me', '.', 'x', 'EOF' ]);
+  testCase('x : me.x', [ 'x', ':', 'me', '.', 'x' ]);
 
-  testCase('y : me.y', [ 'y', ':', 'me', '.', 'y', 'EOF' ]);
+  testCase('y : me.y', [ 'y', ':', 'me', '.', 'y' ]);
 
-  testCase('.1', [ '.', '1', 'EOF' ]);
+  testCase('.1', [ '.', '1' ]);
 
   // Tricky one!
   testCase('.1 .2 .3 .5',
-           [ '.', '1', '.', '2', '.', '3', '.', '5', 'EOF' ]);
+           [ '.', '1', '.', '2', '.', '3', '.', '5' ]);
 
-  testCase('0.1', [ '0.1', 'EOF' ]);
+  testCase('0.1', [ '0.1' ]);
 
   testCase('[[1,3,]].0 .1', [
-    '[', '[', '1', ',', '3', ',', ']', ']', '.', '0', '.', '1',
-    'EOF'
+    '[', '[', '1', ',', '3', ',', ']', ']', '.', '0', '.', '1'
   ]);
 
-  testCase('[x,y,z]',
-           [ '[', 'x', ',', 'y', ',', 'z', ']', 'EOF' ]);
+  testCase('[x,y,z]', [ '[', 'x', ',', 'y', ',', 'z', ']' ]);
 
-  testCase('44.5', [ '44.5', 'EOF' ]);
+  testCase('44.5', [ '44.5' ]);
 
-  testCase('json!?', [ 'json', '!', '?', 'EOF' ]);
+  testCase('json!?', [ 'json', '!', '?' ]);
 
   testCase('{use(std), x: 1, pi: 2 * atan(1),}', [
-    '{',    'use', '(', 'std', ')', ',', 'x',
-    ':',    '1',   ',', 'pi',  ':', '2', '*',
-    'atan', '(',   '1', ')',   ',', '}', 'EOF'
+    '{',  'use', '(', 'std', ')',    ',', 'x', ':', '1', ',',
+    'pi', ':',   '2', '*',   'atan', '(', '1', ')', ',', '}'
   ]);
 
   testCase('{x : "y" + .y, y:.z + \'1\', z: 3, ' +
@@ -241,7 +228,7 @@ function main() {
              'y', ':', '.', 'z',   '+', '\'1\'', ',', 'z',
              ':', '3', ',', 'a',   '.', 'b',     '.', 'c',
              ':', '3', ',', 'a',   ':', '{',     'b', ':',
-             '{', 'c', ':', '3',   '}', '}',     '}', 'EOF'
+             '{', 'c', ':', '3',   '}', '}',     '}'
            ]);
 
   testCase(
@@ -260,7 +247,7 @@ function main() {
         '.', 'y',       '+',     '1',       ',',
         'y', '!',       '!',     '!',       '!',
         ':', '77',      '"z"',   ':',       '44',
-        '}', '==',      '77',    'EOF'
+        '}', '==',      '77'
       ]);
 
   testCase(
@@ -284,8 +271,7 @@ function main() {
         ':',        '7',
         ',',        '}',
         '.',        'x',
-        '==',       '7',
-        'EOF'
+        '==',       '7'
       ]);
 
   console.log('All lexer unit tests passed.');
