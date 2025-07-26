@@ -44,6 +44,12 @@ export class JSONXBlob {
   /// The next ID to add
   private static nextToAdd = 0;
 
+  constructor(data?: Readonly<Uint8Array>|string) {
+    if (data != undefined) {
+      this.set(data);
+    }
+  }
+
   /// Turn into a string
   stringify(): string {
     return `${this.getString()}`;
@@ -92,7 +98,10 @@ export class JSONXBlob {
   }
 
   /// Set the allocation data
-  set(what: Readonly<Uint8Array>) {
+  set(what: Readonly<Uint8Array>|String) {
+    if (what instanceof String) {
+      what = JSONXBlob.encode(what.toString());
+    }
     this.free();
 
     if (JSONXBlob.maxBytes != undefined &&

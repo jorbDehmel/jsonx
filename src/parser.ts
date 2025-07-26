@@ -36,7 +36,7 @@ class JSONXLambdaBody {
   argName: String;
 
   /// The body which will be operated on when this object is
-  /// called
+  /// called, or the external call will will be made
   body: Pos|((thisJSONX: JSONXVar, arg: JSONXVar) => JSONXVar);
 
   /// Creates a new lambda from capture name and body (where the
@@ -84,7 +84,7 @@ class JSONXLambdaBody {
   /// Return the body, but with the named capture replaced by
   /// `arg`. `thisJSONX` is used in external calls for when we
   /// need to capture the calling scope.
-  call(thisJSONX: JSONX, arg: Pos|JSONXVar): JSONXVar {
+  call(arg: Pos|JSONXVar, context?: JSONX): JSONXVar {
     let realArg: Pos;
     if (arg instanceof Pos) {
       realArg = arg;
@@ -94,12 +94,12 @@ class JSONXLambdaBody {
 
     if (this.body instanceof Function) {
       // External call
-      return this.body(thisJSONX,
-                       JSONX.parseObject(realArg, thisJSONX));
+      return this.body(context,
+                       JSONX.parseObject(realArg, context));
     } else {
       // Internal call
       return JSONX.parseObject(
-          this.body.replace(this.argName, realArg), thisJSONX);
+          this.body.replace(this.argName, realArg), context);
     }
   }
 }
@@ -306,7 +306,10 @@ export class JSONX {
           new JSONX(contents.child(first, firstAfter), context);
     } else {
       // Literal
-      value = context.get(contents.cur().text);
+      value = undefined;
+      if (context != undefined) {
+        value = context.get(contents.cur().text);
+      }
       if (value == undefined) {
         value = new JSONXBlob();
         value.set(JSONXBlob.encode(contents.cur().text));
@@ -342,7 +345,7 @@ export class JSONX {
         contents.next();
 
         // Replace w/ call
-        value = value.call(context, arg);
+        value = value.call(arg, context);
         keepLooking = true;
       } else if (contents.cur().text == "=>") {
         // Lambda definition
@@ -522,9 +525,9 @@ JSONX.env.add(
       } else if (arg instanceof JSONXBlob) {
         // Filepath to open, then localize
         return (JSONX.env.get("include") as JSONXLambdaBody)
-            .call(context,
-                  (JSONX.env.get("loadf") as JSONXLambdaBody)
-                      .call(context, arg));
+            .call((JSONX.env.get("loadf") as JSONXLambdaBody)
+                      .call(arg, context),
+                  context);
       } else {
         // JSONX to localize
         for (let i = 0; i < arg.length; ++i) {

@@ -2,7 +2,7 @@
  * @brief Tests lambdas
  */
 
-import {JSONX, JSONXLambdaBody} from '../src/parser';
+import {JSONX, JSONXBlob, JSONXLambdaBody} from '../src/parser';
 
 function assertEq(exp: any, obs: any) {
   console.log(`Expected: ${exp}\nObserved: ${obs}\n`);
@@ -30,13 +30,12 @@ function main() {
   `);
 
   // Basic lambda returning a non-argument
-  // console.log(a.stringify());
-
   const a = test1.get('a') as JSONXLambdaBody;
   assertEq('_ => y', a.stringify());
 
   const a_call = test1.get('a_call');
   assertEq('y', a_call.stringify());
+  assertEq('y', a.call(new JSONXBlob('foo')).stringify());
 
   const b_call = test1.get('b_call');
   assertEq('z', b_call.stringify());
