@@ -3,6 +3,8 @@
  * @brief Lexing/tokenization for JSONX documents
  */
 
+import {JSONXVar} from "./parser";
+
 /// LIT tokens will become blob literals (be they
 /// strings, numbers, bools, etc) unless they are found to be
 /// part of an identifier, OP tokens are syntax operators,
@@ -145,15 +147,35 @@ class Pos {
   /// The current index into `tokens`
   pos: number;
 
+  ///
+  replace(key: String, value: Pos): Pos {
+    let out: Token[] = [];
+    for (const tok of this.tokens) {
+      if (tok.text == key) {
+        for (const value_tok of value.tokens) {
+          out.push(value_tok);
+        }
+      } else {
+        out.push(tok);
+      }
+    }
+    return new Pos(out);
+  }
+
   /// Attach to some token stream
-  constructor(tokens: Token[], pos: number = 0) {
+  constructor(tokens: Token[]) {
     this.tokens = tokens;
-    this.pos = pos;
+    this.pos = 0;
   }
 
   /// Get the current position in the array
   tell(): number {
     return this.pos;
+  }
+
+  /// Seek to some position
+  seek(i: number) {
+    this.pos = i;
   }
 
   /// Create a "child" position with a duplicate of some
@@ -165,7 +187,7 @@ class Pos {
          ++i) {
       l.push(this.tokens[i]);
     }
-    return new Pos(l, 0);
+    return new Pos(l);
   }
 
   /// Advance n tokens, default 1

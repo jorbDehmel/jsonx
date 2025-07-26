@@ -3,6 +3,7 @@
  * @brief Manages blobs, what else is there to say
  */
 
+import {Pos} from "./lexer";
 import {JSONXVar} from "./parser";
 
 /// A lent-out copy-on-write pointer to shared
@@ -45,7 +46,7 @@ export class JSONXBlob {
 
   /// Turn into a string
   stringify(): string {
-    return `"${this.getString()}"`;
+    return `${this.getString()}`;
   }
 
   /// Dummy fn to satisfy type requirements

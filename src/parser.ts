@@ -37,25 +37,41 @@ class JSONXLambdaBody {
 
   /// The body which will be operated on when this object is
   /// called
-  body: JSONXVar|
-      ((thisJSONX: JSONXVar, arg: JSONXVar) => JSONXVar);
+  body: Pos|((thisJSONX: JSONXVar, arg: JSONXVar) => JSONXVar);
 
   /// Creates a new lambda from capture name and body (where the
   /// body can be an arbitrary external function)
   constructor(argName: String,
-              body: JSONXVar|((thisJSONX: JSONXVar,
-                               arg: JSONXVar) => JSONXVar)) {
+              body: Pos|((thisJSONX: JSONXVar,
+                          arg: JSONXVar) => JSONXVar)) {
     this.argName = argName;
     this.body = body;
   }
 
+  ///
+  replace(key: String, value: Pos): JSONXVar {
+    if (!(this.body instanceof Function)) {
+      return new JSONXLambdaBody(this.argName,
+                                 this.body.replace(key, value));
+    }
+    return new JSONXLambdaBody(this.argName, this.body);
+  }
+
   /// Return a string representation of this object
-  stringify(tabbing: string = ""): string {
+  stringify(_: string = ""): string {
     let out = `${this.argName} => `;
     if (this.body instanceof Function) {
       out += "...";
     } else {
-      out += this.body.stringify(tabbing);
+      let first = true;
+      for (const tok of this.body.tokens) {
+        if (first) {
+          first = false;
+        } else {
+          out += ' ';
+        }
+        out += tok.text;
+      }
     }
     return out;
   }
@@ -68,13 +84,22 @@ class JSONXLambdaBody {
   /// Return the body, but with the named capture replaced by
   /// `arg`. `thisJSONX` is used in external calls for when we
   /// need to capture the calling scope.
-  call(thisJSONX: JSONXVar, arg: JSONXVar): JSONXVar {
+  call(thisJSONX: JSONX, arg: Pos|JSONXVar): JSONXVar {
+    let realArg: Pos;
+    if (arg instanceof Pos) {
+      realArg = arg;
+    } else {
+      realArg = new Pos(tokenize(arg.stringify()));
+    }
+
     if (this.body instanceof Function) {
       // External call
-      return this.body(thisJSONX, arg);
+      return this.body(thisJSONX,
+                       JSONX.parseObject(realArg, thisJSONX));
     } else {
       // Internal call
-      throw new Error("Lambda replacement is unimplemented");
+      return JSONX.parseObject(
+          this.body.replace(this.argName, realArg), thisJSONX);
     }
   }
 }
@@ -210,7 +235,7 @@ export class JSONX {
     }
 
     // Parse value
-    let value = this.parseObject();
+    let value = JSONX.parseObject(this.contents, this);
 
     // Push key-weight-value
     this.members.push(
@@ -225,75 +250,75 @@ export class JSONX {
 
   /// Parses (NOT recursively) and object so that it can later
   /// be queried and resolved.
-  private parseObject(): JSONXVar {
+  static parseObject(contents: Pos, context?: JSONX): JSONXVar {
     let value: JSONXVar;
-    if (this.contents.cur().text == "{") {
+    if (contents.cur().text == "{") {
       // Object
       let stack: string[] = [ "{" ];
 
-      this.contents.next();
-      const first = this.contents.tell();
+      contents.next();
+      const first = contents.tell();
       while (stack.length != 0) {
-        if (this.contents.cur().text == "{") {
+        if (contents.cur().text == "{") {
           stack.push("{");
-        } else if (this.contents.cur().text == "}") {
+        } else if (contents.cur().text == "}") {
           if (stack.pop() == "[") {
             throw new Error("Expected ']', but saw '}'");
           }
-        } else if (this.contents.cur().text == "[") {
+        } else if (contents.cur().text == "[") {
           stack.push("[");
-        } else if (this.contents.cur().text == "]") {
+        } else if (contents.cur().text == "]") {
           if (stack.pop() == "}") {
             throw new Error("Expected '}', but saw ']'");
           }
         }
-        this.contents.next();
+        contents.next();
       }
-      const first_after = this.contents.tell() - 1;
+      const first_after = contents.tell() - 1;
 
-      value = new JSONX(this.contents.child(first, first_after),
-                        this);
-    } else if (this.contents.cur().text == "[") {
+      value = new JSONX(contents.child(first, first_after),
+                        context);
+    } else if (contents.cur().text == "[") {
       // Array
       let stack: string[] = [ "[" ];
 
-      this.contents.next();
-      const first = this.contents.tell();
+      contents.next();
+      const first = contents.tell();
       while (stack.length != 0) {
-        if (this.contents.cur().text == "{") {
+        if (contents.cur().text == "{") {
           stack.push("{");
-        } else if (this.contents.cur().text == "}") {
+        } else if (contents.cur().text == "}") {
           if (stack.pop() == "[") {
             throw new Error("Expected ']', but saw '}'");
           }
-        } else if (this.contents.cur().text == "[") {
+        } else if (contents.cur().text == "[") {
           stack.push("[");
-        } else if (this.contents.cur().text == "]") {
+        } else if (contents.cur().text == "]") {
           if (stack.pop() == "}") {
             throw new Error("Expected '}', but saw ']'");
           }
         }
-        this.contents.next();
+        contents.next();
       }
-      const firstAfter = this.contents.tell() - 1;
+      const firstAfter = contents.tell() - 1;
 
-      value = new JSONX(this.contents.child(first, firstAfter),
-                        this);
+      value =
+          new JSONX(contents.child(first, firstAfter), context);
     } else {
       // Literal
-      value = this.get(this.contents.cur().text);
+      value = context.get(contents.cur().text);
       if (value == undefined) {
         value = new JSONXBlob();
-        value.set(JSONXBlob.encode(this.contents.cur().text));
+        value.set(JSONXBlob.encode(contents.cur().text));
       }
-      this.contents.next();
+      contents.next();
     }
 
     // Math, lambdas and calls thereof can be here
     let keepLooking = true;
     while (keepLooking) {
       keepLooking = false;
-      if (this.contents.cur().text == "(") {
+      if (contents.cur().text == "(") {
         // Lambda call
         if (!(value instanceof JSONXLambdaBody)) {
           console.log(value.stringify());
@@ -301,36 +326,45 @@ export class JSONX {
         }
 
         // Advance past open paren
-        this.contents.next();
+        contents.next();
 
         // Parse arg object
-        let arg = this.parseObject();
+        const startPos = contents.tell();
+        JSONX.parseObject(contents, context);
+        const firstAfter = contents.tell();
+        let arg = contents.child(startPos, firstAfter);
 
         // Advance past close paren
-        if (this.contents.cur().text != ")") {
+        if (contents.cur().text != ")") {
           throw new Error(
               "Missing lambda call closing parenthesis");
         }
-        this.contents.next();
+        contents.next();
 
         // Replace w/ call
-        value = value.call(this, arg);
+        value = value.call(context, arg);
         keepLooking = true;
-      } else if (this.contents.cur().text == "=>") {
+      } else if (contents.cur().text == "=>") {
         // Lambda definition
         // Value is retroactively the argument name
-        this.contents.next();
-        value = new JSONXLambdaBody(value.stringify(),
-                                    this.parseObject());
+        contents.next();
+
+        const startVal = contents.tell();
+        JSONX.parseObject(contents, context);
+        const firstAfter = contents.tell();
+
+        value = new JSONXLambdaBody(
+            value.stringify(),
+            contents.child(startVal, firstAfter));
         keepLooking = true;
-      } else if (this.contents.peek(1).type == "MATH") {
+      } else if (contents.peek(1).type == "MATH") {
         throw new Error('Math is unimplemented');
         keepLooking = true;
-      } else if (this.contents.cur().text == ".") {
+      } else if (contents.cur().text == ".") {
         // Path to be resolved
-        this.contents.next();
-        let name = this.contents.cur().text;
-        this.contents.next();
+        contents.next();
+        let name = contents.cur().text;
+        contents.next();
         value = value.get(name);
         keepLooking = true;
       }
@@ -342,7 +376,7 @@ export class JSONX {
   //////////////////////////////////////////////////////////////
 
   /// Initialize from some token stream
-  constructor(contents: Pos = new Pos([], 0), parent?: JSONX,
+  constructor(contents: Pos = new Pos([]), parent?: JSONX,
               thisJSONX?: JSONX) {
     this.parent = parent;
     this.contents = contents;
@@ -364,11 +398,12 @@ export class JSONX {
   private ensureResolved() {
     if (!this.isResolved) {
       // Resolve
+      this.members = [];
+      this.contents.seek(0);
       this.isResolved = true;
       while (!this.contents.done()) {
         this.parseEntry();
       }
-      delete this.contents;
     }
   }
 
@@ -562,4 +597,4 @@ let math = JSONX.env.add(new JSONX(), "math") as JSONX;
       }
     });
 
-export {JSONXBlob};
+export {JSONXBlob, JSONXLambdaBody};
