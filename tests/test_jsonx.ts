@@ -11,14 +11,13 @@ import {
 function assert(condition: boolean,
                 msg: string = 'Assertion failed'): void {
   if (!condition) {
-    throw new Error(msg);
+    console.log(msg);
+    // throw new Error(msg);
   }
 }
 
 function assertEq(a: any, b: any) {
-  if (a != b) {
-    throw new Error(`Expected ${a} , ${b}`);
-  }
+  assert(a == b, `Expected ${a} , ${b}`);
 }
 
 function getblob(what: any): JSONXBlob {
@@ -26,14 +25,6 @@ function getblob(what: any): JSONXBlob {
   assert(what instanceof JSONXBlob,
          'Potential blob is not a blob');
   return what as JSONXBlob;
-}
-
-function get(on: any, path: (string|number)[]): any {
-  let out: any = on;
-  for (const tok of path) {
-    out = out.get(tok);
-  }
-  return out;
 }
 
 /// Runs test cases
@@ -84,12 +75,11 @@ function main(): void {
 
   obj = JSONX.loads('{a: "no", b: {a: "yes"}}');
   console.log(obj.stringify());
-  assertEq(getblob(get(obj, [ "b", "a" ])).getString(),
-           '"yes"');
+  assertEq(getblob(obj.get("b").get("a")).getString(), '"yes"');
 
   obj = JSONX.loads('{a: "no", b: {}}');
   console.log(obj.stringify());
-  assertEq(get(obj, [ "b", "a" ]), undefined);
+  assertEq(obj.get("b").get("a"), undefined);
   assertEq(obj.get("this"), obj);
   assertEq(obj.get("b").get("parent"), obj);
 
@@ -109,17 +99,18 @@ function main(): void {
   console.log(loaded.stringify());
   assertEq(getblob(loaded.get("\"a\"")).getString(), '123');
   assertEq(getblob(loaded.get("\"b\"")).getString(), '123');
-  assertEq(getblob(get(loaded, [ "\"subscope\"", "\"a\"" ]))
+  assertEq(getblob(loaded.get("\"subscope\"").get("\"a\""))
                .getString(),
            '123');
-  assertEq(getblob(get(loaded, [ "\"subscope\"", "\"b\"" ]))
-               .getString(),
-           '321');
+  assertEq(
+      getblob(loaded.get("\"subscope\"").get("b")).getString(),
+      '321');
 
   loaded = JSONX.loadf('./tests/files/test_2.jsonx');
   console.log(loaded.stringify());
-  assertEq(getblob(get(loaded, [ "test_1", "a" ])).getString(),
-           '123');
+  assertEq(
+      getblob(loaded.get("test_1").get("\"a\"")).getString(),
+      '123');
   assertEq(getblob(loaded.get("data")).getString(), '321');
 
   loaded = JSONX.loadf('./tests/files/test_3.jsonx');

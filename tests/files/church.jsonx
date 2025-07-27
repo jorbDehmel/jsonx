@@ -6,6 +6,11 @@
     // Successor-of operator
     S: n => f => x => n(f)(f(x)),
 
+    // Some other church numerals
+    one: S(zero),
+    two: S(one),
+    three: S(two),
+
     // Addition
     add: a => b => f => x => a(f)(b(f)(x)),
 

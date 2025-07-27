@@ -263,13 +263,19 @@ export class JSONX {
           stack.push("{");
         } else if (contents.cur().text == "}") {
           if (stack.pop() == "[") {
-            throw new Error("Expected ']', but saw '}'");
+            throw new Error(`At ${contents.cur().file}:${
+                contents.cur().line}.${
+                contents.cur()
+                    .col}> Expected ']', but saw '}'`);
           }
         } else if (contents.cur().text == "[") {
           stack.push("[");
         } else if (contents.cur().text == "]") {
           if (stack.pop() == "}") {
-            throw new Error("Expected '}', but saw ']'");
+            throw new Error(`At ${contents.cur().file}:${
+                contents.cur().line}.${
+                contents.cur()
+                    .col}> Expected '}', but saw ']'`);
           }
         }
         contents.next();
@@ -289,13 +295,19 @@ export class JSONX {
           stack.push("{");
         } else if (contents.cur().text == "}") {
           if (stack.pop() == "[") {
-            throw new Error("Expected ']', but saw '}'");
+            throw new Error(`At ${contents.cur().file}:${
+                contents.cur().line}.${
+                contents.cur()
+                    .col}> Expected ']', but saw '}'`);
           }
         } else if (contents.cur().text == "[") {
           stack.push("[");
         } else if (contents.cur().text == "]") {
           if (stack.pop() == "}") {
-            throw new Error("Expected '}', but saw ']'");
+            throw new Error(`At ${contents.cur().file}:${
+                contents.cur().line}.${
+                contents.cur()
+                    .col}> Expected '}', but saw ']'`);
           }
         }
         contents.next();
@@ -320,12 +332,18 @@ export class JSONX {
     // Math, lambdas and calls thereof can be here
     let keepLooking = true;
     while (keepLooking) {
+      if (value == undefined) {
+        break;
+      }
+
       keepLooking = false;
       if (contents.cur().text == "(") {
         // Lambda call
         if (!(value instanceof JSONXLambdaBody)) {
           console.log(value.stringify());
-          throw new Error("Cannot call non-lambda");
+          throw new Error(`At ${contents.cur().file}:${
+              contents.cur().line}.${
+              contents.cur().col}> Cannot call non-lambda`);
         }
 
         // Advance past open paren
@@ -340,7 +358,11 @@ export class JSONX {
         // Advance past close paren
         if (contents.cur().text != ")") {
           throw new Error(
-              "Missing lambda call closing parenthesis");
+              `At ${contents.cur().file}:${
+                  contents.cur().line}.${
+                  contents.cur()
+                      .col}> Missing lambda call closing ` +
+              'parenthesis');
         }
         contents.next();
 
@@ -361,7 +383,9 @@ export class JSONX {
             contents.child(startVal, firstAfter));
         keepLooking = true;
       } else if (contents.peek(1).type == "MATH") {
-        throw new Error('Math is unimplemented');
+        throw new Error(
+            `At ${contents.cur().file}:${contents.cur().line}.${
+                contents.cur().col}> Math is unimplemented`);
         keepLooking = true;
       } else if (contents.cur().text == ".") {
         // Path to be resolved
@@ -420,7 +444,7 @@ export class JSONX {
     } else if (name == "parent") {
       return this.parent;
     } else if (name == "global") {
-      if (this.parent) {
+      if (this.parent && this.parent.parent) {
         return this.parent.get(name);
       } else {
         return this;
